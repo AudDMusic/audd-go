@@ -113,4 +113,4 @@ Calculate stats of offline music plays. Send files or audio streams from multipl
 Recognize the music that plays on radio stations with AudD real-time music recognition service for audio streams. Use the AudD Music DB, or upload your own songs DB. (Not available with this library, contact api@audd.io for more info.)
 
 # License
-[The MIT License (MIT)](LICENSE.txt)
+[The MIT License (MIT)](LICENSE)
