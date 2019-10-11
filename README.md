@@ -1,5 +1,12 @@
 [![AudD](https://audd.io/images/1.png)](https://audd.io/)
 
+# Table of Contents
+
+* [Installation](#installation)
+* [Quick Start](#quick-start)
+* [Use Cases](#use-cases)
+* [License](#license)
+
 <a name="installation"></a>
 ## Installation
 `go get github.com/AudDMusic/audd-go`
@@ -100,7 +107,7 @@ func main()  {
 	fmt.Printf("First match: %s - %s\n\n%s", firstSong.Artist, firstSong.Title, firstSong.Lyrics)
 }
 ```
-
+<a name="use-cases"></a>
 # Use Cases
 How you can use the AudD [Music Recognition API](https://audd.io/):
 ## UGC
@@ -110,7 +117,7 @@ Detect and recognize music in your apps using AudD Music Recognition API. Identi
 ## Offline background music
 Calculate stats of offline music plays. Send files or audio streams from multiple devices in the real world into our Music Recognition API.
 ## Audio streams
-Recognize the music that plays on radio stations with AudD real-time music recognition service for audio streams. Use the AudD Music DB, or upload your own songs DB. (Not available with this library, contact api@audd.io for more info.)
-
+Recognize the music that plays on radio stations with AudD real-time music recognition service for audio streams. Use the AudD Music DB, or upload your own songs DB. (Currently not available with this library, contact api@audd.io if you're interested in the live muisic recognition.)
+<a name="license"></a>
 # License
 [The MIT License (MIT)](LICENSE)
