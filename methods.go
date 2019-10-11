@@ -15,7 +15,6 @@ type RecognitionResponse struct {
 	Error  struct {
 		ErrorCode    int    `json:"error_code"`
 		ErrorMessage string `json:"error_message"`
-		Error        error  `json:"-"`
 	} `json:"error"`
 	Result  RecognitionResult `json:"result"`
 	Warning struct {
@@ -29,7 +28,6 @@ type RecognitionResponseAllMatches struct {
 	Error  struct {
 		ErrorCode    int    `json:"error_code"`
 		ErrorMessage string `json:"error_message"`
-		Error        error  `json:"-"`
 	} `json:"error"`
 	Result []RecognitionResult `json:"result"`
 }
@@ -39,7 +37,6 @@ type HummingRecognitionResponse struct {
 	Error  struct {
 		ErrorCode    int    `json:"error_code"`
 		ErrorMessage string `json:"error_message"`
-		Error        error  `json:"-"`
 	} `json:"error"`
 	Result HummingRecognitionResult `json:"result"`
 }
@@ -49,7 +46,6 @@ type FindLyricsResponse struct {
 	Error  struct {
 		ErrorCode    int    `json:"error_code"`
 		ErrorMessage string `json:"error_message"`
-		Error        error  `json:"-"`
 	} `json:"error"`
 	Result []LyricsResult `json:"result"`
 }
