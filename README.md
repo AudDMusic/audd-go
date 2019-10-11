@@ -1,21 +1,23 @@
-[![AudD](https://audd.io/images/1.png)](https://audd.io/)
+[![GoDoc](https://godoc.org/github.com/AudDMusic/audd-go?status.svg)](https://godoc.org/github.com/AudDMusic/audd-go)
+[![MIT licensed](https://img.shields.io/badge/license-MIT-blue.svg)](./LICENSE)
+[![Twitter Follow](https://img.shields.io/twitter/follow/helloAudD.svg?style=social&label=Follow)](https://twitter.com/helloAudD)
 
-# Table of Contents
+## Table of Contents
 
-* [Installation](#installation)
 * [Quick Start](#quick-start)
 * [Use Cases](#use-cases)
 * [License](#license)
 
-<a name="installation"></a>
+<a name="quick-start"></a>
+# Quick Start
+
 ## Installation
 `go get github.com/AudDMusic/audd-go`
 
 ## API Token
-To use the AudD Music Recognition API, obtain an api_token from [our Telegram bot](https://t.me/auddbot?start=api).
+To send >10 requests, obtain an api_token from [our Telegram bot](https://t.me/auddbot?start=api) and change "test" to the obtained token.
 
-<a name="quick-start"></a>
-# Quick Start
+## Sending the files
 For `recognize` and `recognizeWithOffset` API methods you have to send a file for recognition. There are two ways to send files to our API, you can either
 - 🔗 provide an HTTP URL of the file (our server will download and recognize the music from the file), or
 - 📤 post the file using multipart/form-data in the usual way that files are uploaded via the browser.
@@ -110,13 +112,13 @@ func main()  {
 <a name="use-cases"></a>
 # Use Cases
 How you can use the AudD [Music Recognition API](https://audd.io/):
-## UGC
+### UGC
 Detect music and identify songs from user-generated content in your apps. Create upload filters when the law requires. Use the metadata AudD Music Recognition API returns in your recommendation systems.
-## In-app music recognition and lyrics searching
+### In-app music recognition and lyrics searching
 Detect and recognize music in your apps using AudD Music Recognition API. Identify songs for your users and display the lyrics of the recognized songs. Or just search lyrics by text.
-## Offline background music
+### Offline background music
 Calculate stats of offline music plays. Send files or audio streams from multiple devices in the real world into our Music Recognition API.
-## Audio streams
+### Audio streams
 Recognize the music that plays on radio stations with AudD real-time music recognition service for audio streams. Use the AudD Music DB, or upload your own songs DB. (Currently not available with this library, contact api@audd.io if you're interested in the live muisic recognition.)
 <a name="license"></a>
 # License
