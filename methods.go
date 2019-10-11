@@ -58,6 +58,10 @@ func Recognize(url, ApiToken string, parameters map[string]string) (RecognitionR
 	return handleRecognitionResponse(urlRequest(url, ApiToken, parameters, recognizeMethod))
 }
 
+func (v RecognitionResponse) IsNull() bool {
+	return v.Result.Title == ""
+}
+
 // RecognizeAllMatches returns all the matched songs
 func RecognizeAllMatches(url, ApiToken string) (RecognitionResponseAllMatches, error) {
 	parameters := map[string]string{"all": "true"}
