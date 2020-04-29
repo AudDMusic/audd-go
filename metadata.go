@@ -13,8 +13,7 @@ type RecognitionResult struct {
 	AppleMusic  AppleMusicResult `json:"apple_music"`
 	Deezer      DeezerResult     `json:"deezer"`
 	Spotify     SpotifyResult    `json:"spotify"`
-	TimeCode    string `json:"timecode"`
-	SongLink    string `json:"song_link"`
+	SongLink    string  		 `json:"song_link"`
 }
 
 type HummingRecognitionResult struct {
