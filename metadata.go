@@ -10,10 +10,11 @@ type RecognitionResult struct {
 	ISRC        string           `json:"isrc"`
 	UPC         string           `json:"upc"`
 	Lyrics      LyricsResult     `json:"lyrics"`
-	ITunes      ITunesResult     `json:"itunes"`
 	AppleMusic  AppleMusicResult `json:"apple_music"`
 	Deezer      DeezerResult     `json:"deezer"`
 	Spotify     SpotifyResult    `json:"spotify"`
+	TimeCode    string `json:"timecode"`
+	SongLink    string `json:"song_link"`
 }
 
 type HummingRecognitionResult struct {
@@ -36,40 +37,6 @@ type LyricsResult struct {
 	Artist        string `json:"artist"`
 	Lyrics        string `json:"lyrics"`
 	Media         string `json:"media"`
-}
-
-type ITunesResult struct {
-	WrapperType            string  `json:"wrapperType"`
-	Kind                   string  `json:"kind"`
-	ArtistId               int     `json:"artistId"`
-	CollectionId           int     `json:"collectionId"`
-	TrackId                int     `json:"trackId"`
-	ArtistName             string  `json:"artistName"`
-	CollectionName         string  `json:"collectionName"`
-	TrackName              string  `json:"trackName"`
-	CollectionCensoredName string  `json:"collectionCensoredName"`
-	TrackCensoredName      string  `json:"trackCensoredName"`
-	ArtistViewUrl          string  `json:"artistViewUrl"`
-	CollectionViewUrl      string  `json:"collectionViewUrl"`
-	TrackViewUrl           string  `json:"trackViewUrl"`
-	PreviewUrl             string  `json:"previewUrl"`
-	ArtworkUrl30           string  `json:"artworkUrl30"`
-	ArtworkUrl60           string  `json:"artworkUrl60"`
-	ArtworkUrl100          string  `json:"artworkUrl100"`
-	CollectionPrice        float64 `json:"collectionPrice"`
-	TrackPrice             float64 `json:"trackPrice"`
-	ReleaseDate            string  `json:"releaseDate"`
-	CollectionExplicitness string  `json:"collectionExplicitness"`
-	TrackExplicitness      string  `json:"trackExplicitness"`
-	DiscCount              int     `json:"discCount"`
-	DiscNumber             int     `json:"discNumber"`
-	TrackCount             int     `json:"trackCount"`
-	TrackNumber            int     `json:"trackNumber"`
-	TrackTimeMillis        int     `json:"trackTimeMillis"`
-	Country                string  `json:"country"`
-	Currency               string  `json:"currency"`
-	PrimaryGenreName       string  `json:"primaryGenreName"`
-	IsStreamable           bool    `json:"isStreamable"`
 }
 
 type AppleMusicResult struct {
