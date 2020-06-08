@@ -33,7 +33,7 @@ import (
 )
 
 func main()  {
-	parameters := map[string]string{"return": "timecode,apple_music,deezer,spotify"}
+	parameters := map[string]string{"return": "apple_music,deezer,spotify"}
 	result, err := audd.Recognize("https://audd.tech/example1.mp3", "test", parameters)
 	if err != nil {
 		panic(err)
@@ -48,9 +48,9 @@ func main()  {
 	}
 	song := result.Result
 	fmt.Printf("%s - %s.\nTimecode: %s, album: %s. ℗ %s, %s\n\n" +
-		"Listen on:\nApple Music: %s, \nSpotify: %s,\nDeezer: %s.",
+		"Listen: %s\nOr directly on:\n- Apple Music: %s, \n- Spotify: %s,\n- Deezer: %s.",
 		song.Artist, song.Title, song.Timecode, song.Album, song.Label, song.ReleaseDate,
-		song.AppleMusic.URL, song.Spotify.ExternalUrls.Spotify, song.Deezer.Link)
+		song.SongLink, song.AppleMusic.URL, song.Spotify.ExternalUrls.Spotify, song.Deezer.Link)
 	if len(song.AppleMusic.Previews) > 0 {
 		fmt.Printf("\n\nPreview: %s", song.AppleMusic.Previews[0].URL)
 	}
@@ -64,10 +64,11 @@ If you run this code, you should see a result like
 Imagine Dragons - Warriors.
 Timecode: 00:40, album: Warriors. ℗ Universal Music, 2014-09-18
 
-Listen on:
-Apple Music: https://music.apple.com/us/album/warriors/1440831203?app=music&at=1000l33QU&i=1440831624&mt=1,
-Spotify: https://open.spotify.com/track/1lgN0A2Vki2FTON5PYq42m,
-Deezer: https://www.deezer.com/track/85963521.
+Listen: https://lis.tn/Warriors
+Or directly on:
+- Apple Music: https://music.apple.com/us/album/warriors/1440831203?app=music&at=1000l33QU&i=1440831624&mt=1,
+- Spotify: https://open.spotify.com/track/1lgN0A2Vki2FTON5PYq42m,
+- Deezer: https://www.deezer.com/track/85963521.
 
 Preview: https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview118/v4/65/07/f5/6507f5c5-dba8-f2d5-d56b-39dbb62a5f60/mzaf_1124211745011045566.plus.aac.p.m4a
 ```
