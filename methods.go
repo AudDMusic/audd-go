@@ -16,7 +16,7 @@ type RecognitionResponse struct {
 		ErrorCode    int    `json:"error_code"`
 		ErrorMessage string `json:"error_message"`
 	} `json:"error"`
-	Result  RecognitionResult `json:"result"`
+	Result  RecognitionResultV2 `json:"result"`
 	Warning struct {
 		ErrorCode    int    `json:"error_code"`
 		ErrorMessage string `json:"error_message"`
