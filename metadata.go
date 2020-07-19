@@ -16,6 +16,146 @@ type RecognitionResult struct {
 	SongLink    string  		 `json:"song_link"`
 }
 
+type RecognitionResultV2 struct {
+	Score       int               `json:"score,omitempty"`
+	Artist      string            `json:"artist,omitempty"`
+	Title       string            `json:"title,omitempty"`
+	Album       string             `json:"album,omitempty"`
+	ReleaseDate string             `json:"release_date,omitempty"`
+	Label       string             `json:"label,omitempty"`
+	Underground bool               `json:"underground,omitempty"`
+	Timecode    string             `json:"timecode,omitempty"`
+	SongLength  string             `json:"song_length,omitempty"`
+	SongLink    string             `json:"song_link,omitempty"`
+	Lyrics      *LyricsResult      `json:"lyrics,omitempty"`
+	AppleMusic  *AppleMusicResult  `json:"apple_music,omitempty"`
+	Deezer      *DeezerResult      `json:"deezer,omitempty"`
+	MusicBrainz []MusicbrainzRecordings `json:"musicbrainz,omitempty"`
+	Napster     *NapsterResult     `json:"napster,omitempty"`
+	Spotify     *SpotifyResult     `json:"spotify,omitempty"`
+	ISRC        string             `json:"isrc,omitempty"`
+	UPC         string             `json:"upc,omitempty"`
+	AudioID     int                `json:"audio_id,omitempty"`
+}
+type NapsterResult struct {
+	Type               string        `json:"type"`
+	ID                 string        `json:"id"`
+	Index              int           `json:"index"`
+	Disc               int           `json:"disc"`
+	Href               string        `json:"href"`
+	PlaybackSeconds    int           `json:"playbackSeconds"`
+	IsExplicit         bool          `json:"isExplicit"`
+	IsStreamable       bool          `json:"isStreamable"`
+	IsAvailableInHiRes bool          `json:"isAvailableInHiRes"`
+	Name               string        `json:"name"`
+	Isrc               string        `json:"isrc"`
+	Shortcut           string        `json:"shortcut"`
+	Blurbs             []interface{} `json:"blurbs"`
+	ArtistID           string        `json:"artistId"`
+	ArtistName         string        `json:"artistName"`
+	AlbumName          string        `json:"albumName"`
+	Formats            []struct {
+		Type       string `json:"type"`
+		Bitrate    int    `json:"bitrate"`
+		Name       string `json:"name"`
+		SampleBits int    `json:"sampleBits"`
+		SampleRate int    `json:"sampleRate"`
+	} `json:"formats"`
+	LosslessFormats []interface{} `json:"losslessFormats"`
+	AlbumID         string        `json:"albumId"`
+	Contributors    struct {
+		PrimaryArtist string `json:"primaryArtist"`
+	} `json:"contributors"`
+	Links struct {
+		Artists struct {
+			Ids  []string `json:"ids"`
+			Href string   `json:"href"`
+		} `json:"artists"`
+		Albums struct {
+			Ids  []string `json:"ids"`
+			Href string   `json:"href"`
+		} `json:"albums"`
+		Genres struct {
+			Ids  []string `json:"ids"`
+			Href string   `json:"href"`
+		} `json:"genres"`
+		Tags struct {
+			Ids  []string `json:"ids"`
+			Href string   `json:"href"`
+		} `json:"tags"`
+	} `json:"links"`
+	PreviewURL string `json:"previewURL"`
+}
+
+type MusicbrainzRecordings struct {
+	ID             string      `json:"id"`
+	Score          int         `json:"score"`
+	Title          string      `json:"title"`
+	Length         int         `json:"length"`
+	Disambiguation string      `json:"disambiguation"`
+	Video          interface{} `json:"video"`
+	ArtistCredit   []struct {
+		Name   string `json:"name"`
+		Artist struct {
+			ID       string `json:"id"`
+			Name     string `json:"name"`
+			SortName string `json:"sort-name"`
+		} `json:"artist"`
+	} `json:"artist-credit"`
+	Releases []struct {
+		ID             string `json:"id"`
+		Count          int    `json:"count"`
+		Title          string `json:"title"`
+		Status         string `json:"status"`
+		Disambiguation string `json:"disambiguation,omitempty"`
+		Date          string `json:"date"`
+		Country       string `json:"country"`
+		ReleaseEvents []struct {
+			Date string `json:"date"`
+			Area struct {
+				ID            string   `json:"id"`
+				Name          string   `json:"name"`
+				SortName      string   `json:"sort-name"`
+				Iso31661Codes []string `json:"iso-3166-1-codes"`
+			} `json:"area"`
+		} `json:"release-events"`
+		TrackCount int `json:"track-count"`
+		Media      []struct {
+			Position int    `json:"position"`
+			Format   string `json:"format"`
+			Track    []struct {
+				ID     string `json:"id"`
+				Number string `json:"number"`
+				Title  string `json:"title"`
+				Length int    `json:"length"`
+			} `json:"track"`
+			TrackCount  int `json:"track-count"`
+			TrackOffset int `json:"track-offset"`
+		} `json:"media"`
+		ArtistCredit []struct {
+			Name   string `json:"name"`
+			Artist struct {
+				ID             string `json:"id"`
+				Name           string `json:"name"`
+				SortName       string `json:"sort-name"`
+				Disambiguation string `json:"disambiguation"`
+			} `json:"artist"`
+		} `json:"artist-credit,omitempty"`
+		ReleaseGroup struct {
+			ID             string   `json:"id"`
+			TypeID         string   `json:"type-id"`
+			Title          string   `json:"title"`
+			PrimaryType    string   `json:"primary-type"`
+			SecondaryTypes []string `json:"secondary-types"`
+		} `json:"release-group,omitempty"`
+	} `json:"releases"`
+	Isrcs []string `json:"isrcs"`
+	Tags  []struct {
+		Count int    `json:"count"`
+		Name  string `json:"name"`
+	} `json:"tags"`
+}
+
 type HummingRecognitionResult struct {
 	Count int             `json:"count"`
 	List  []HummingResult `json:"list"`
