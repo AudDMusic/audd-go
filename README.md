@@ -1,4 +1,4 @@
-[![PkgGoDev](https://pkg.go.dev/badge/github.com/AudDMusic/audd-go)](https://pkg.go.dev/github.com/AudDMusic/audd-go)
+[![PkgGoDev](https://pkg.go.dev/badge/github.com/AudDMusic/audd-go@v0.1.0)](https://pkg.go.dev/github.com/AudDMusic/audd-go@v0.1.0)
 [![MIT licensed](https://img.shields.io/badge/license-MIT-blue.svg)](./LICENSE)
 [![Twitter Follow](https://img.shields.io/twitter/follow/helloAudD.svg?style=social&label=Follow)](https://twitter.com/helloAudD)
 
