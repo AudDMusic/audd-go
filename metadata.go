@@ -1,42 +1,59 @@
 package audd
 
 type RecognitionResult struct {
-	Artist      string           `json:"artist"`
-	Title       string           `json:"title"`
-	Album       string           `json:"album"`
-	ReleaseDate string           `json:"release_date"`
-	Label       string           `json:"label"`
-	Timecode    string           `json:"timecode"`
-	ISRC        string           `json:"isrc"`
-	UPC         string           `json:"upc"`
-	Lyrics      LyricsResult     `json:"lyrics"`
-	AppleMusic  AppleMusicResult `json:"apple_music"`
-	Deezer      DeezerResult     `json:"deezer"`
-	Spotify     SpotifyResult    `json:"spotify"`
-	SongLink    string  		 `json:"song_link"`
+	Artist      string                  `json:"artist,omitempty"`
+	Title       string                  `json:"title,omitempty"`
+	Album       string                  `json:"album,omitempty"`
+	ReleaseDate string                  `json:"release_date,omitempty"`
+	Label       string                  `json:"label,omitempty"`
+	Timecode    string                  `json:"timecode,omitempty"`
+	SongLink    string                  `json:"song_link,omitempty"`
+	Lyrics      *LyricsResult           `json:"lyrics,omitempty"`
+	AppleMusic  *AppleMusicResult       `json:"apple_music,omitempty"`
+	Deezer      *DeezerResult           `json:"deezer,omitempty"`
+	MusicBrainz []MusicbrainzRecordings `json:"musicbrainz,omitempty"`
+	Napster     *NapsterResult          `json:"napster,omitempty"`
+	Spotify     *SpotifyResult          `json:"spotify,omitempty"`
+	ISRC        string                  `json:"isrc,omitempty"`
+	UPC         string                  `json:"upc,omitempty"`
+	Score       int                     `json:"score,omitempty"`
+	SongLength  string                  `json:"song_length,omitempty"`
+	AudioID     int                     `json:"audio_id,omitempty"`
 }
 
-type RecognitionResultV2 struct {
-	Score       int               `json:"score,omitempty"`
-	Artist      string            `json:"artist,omitempty"`
-	Title       string            `json:"title,omitempty"`
-	Album       string             `json:"album,omitempty"`
-	ReleaseDate string             `json:"release_date,omitempty"`
-	Label       string             `json:"label,omitempty"`
-	Underground bool               `json:"underground,omitempty"`
-	Timecode    string             `json:"timecode,omitempty"`
-	SongLength  string             `json:"song_length,omitempty"`
-	SongLink    string             `json:"song_link,omitempty"`
-	Lyrics      *LyricsResult      `json:"lyrics,omitempty"`
-	AppleMusic  *AppleMusicResult  `json:"apple_music,omitempty"`
-	Deezer      *DeezerResult      `json:"deezer,omitempty"`
-	MusicBrainz []MusicbrainzRecordings `json:"musicbrainz,omitempty"`
-	Napster     *NapsterResult     `json:"napster,omitempty"`
-	Spotify     *SpotifyResult     `json:"spotify,omitempty"`
-	ISRC        string             `json:"isrc,omitempty"`
-	UPC         string             `json:"upc,omitempty"`
-	AudioID     int                `json:"audio_id,omitempty"`
+type RecognitionEnterpriseResult struct {
+	Songs []RecognitionResult `json:"songs"`
+	Offset string `json:"offset"`
 }
+
+type HummingRecognitionResult struct {
+	Count int             `json:"count"`
+	List  []HummingResult `json:"list"`
+}
+
+type HummingResult struct {
+	Score  int    `json:"score"`
+	Artist string `json:"artist"`
+	Title  string `json:"title"`
+}
+
+type LyricsResult struct {
+	SongId        int    `json:"song_id,string"`
+	ArtistId      int    `json:"artist_id,string"`
+	Title         string `json:"title"`
+	TitleWithFeat string `json:"title_with_featured"`
+	FullTitle     string `json:"full_title"`
+	Artist        string `json:"artist"`
+	Lyrics        string `json:"lyrics"`
+	Media         string `json:"media"`
+}
+
+type Stream struct {
+	RadioID       int    `json:"radio_id"`
+	URL           string `json:"url"`
+	StreamRunning bool   `json:"stream_running"`
+}
+
 type NapsterResult struct {
 	Type               string        `json:"type"`
 	ID                 string        `json:"id"`
@@ -108,9 +125,9 @@ type MusicbrainzRecordings struct {
 		Title          string `json:"title"`
 		Status         string `json:"status"`
 		Disambiguation string `json:"disambiguation,omitempty"`
-		Date          string `json:"date"`
-		Country       string `json:"country"`
-		ReleaseEvents []struct {
+		Date           string `json:"date"`
+		Country        string `json:"country"`
+		ReleaseEvents  []struct {
 			Date string `json:"date"`
 			Area struct {
 				ID            string   `json:"id"`
@@ -156,27 +173,6 @@ type MusicbrainzRecordings struct {
 	} `json:"tags"`
 }
 
-type HummingRecognitionResult struct {
-	Count int             `json:"count"`
-	List  []HummingResult `json:"list"`
-}
-
-type HummingResult struct {
-	Score  int    `json:"score"`
-	Artist string `json:"artist"`
-	Title  string `json:"title"`
-}
-
-type LyricsResult struct {
-	SongId        int    `json:"song_id,string"`
-	ArtistId      int    `json:"artist_id,string"`
-	Title         string `json:"title"`
-	TitleWithFeat string `json:"title_with_featured"`
-	FullTitle     string `json:"full_title"`
-	Artist        string `json:"artist"`
-	Lyrics        string `json:"lyrics"`
-	Media         string `json:"media"`
-}
 
 type AppleMusicResult struct {
 	Previews []struct {
