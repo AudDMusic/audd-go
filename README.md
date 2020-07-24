@@ -37,10 +37,11 @@ import (
 )
 
 func main()  {
-    // initialize the client with "test" as a token
+	// initialize the client with "test" as a token
 	client := audd.NewClient("test")
-    // recognize music in audd.tech/example1.mp3 and return Apple Music, Deezer and Spotify metadata
-	song, err := client.RecognizeByUrl("https://audd.tech/example1.mp3", "apple_music,deezer,spotify", nil)
+	// recognize music in audd.tech/example1.mp3 and return Apple Music, Deezer and Spotify metadata
+	Url := "https://audd.tech/example1.mp3"
+	song, err := client.RecognizeByUrl(Url, "apple_music,deezer,spotify", nil)
 	if err != nil {
 		panic(err)
 	}
