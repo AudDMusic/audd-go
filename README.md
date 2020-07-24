@@ -15,7 +15,7 @@
 `go get github.com/AudDMusic/audd-go`
 
 ## API Token
-To send >10 requests, obtain an api_token from [our Telegram bot](https://t.me/auddbot?start=api) and change "test" to the obtained token.
+To send >10 requests, obtain an api_token from [our Telegram bot](https://t.me/auddbot?start=api) and change "test" to the obtained token in `NewClient("test")`.
 
 ## Sending the files
 For `recognize` and `recognizeWithOffset` API methods you have to send a file for recognition. There are two ways to send files to our API, you can either
@@ -33,21 +33,14 @@ import (
 )
 
 func main()  {
-	parameters := map[string]string{"return": "apple_music,deezer,spotify"}
-	result, err := audd.Recognize("https://audd.tech/example1.mp3", "test", parameters)
+    // initialize the client with "test" as a token
+	client := audd.NewClient("test")
+    // recognize music in audd.tech/example1.mp3 and return Apple Music, Deezer and Spotify metadata
+	song, err := client.RecognizeByUrl("https://audd.tech/example1.mp3", "apple_music,deezer,spotify", nil)
 	if err != nil {
 		panic(err)
 	}
-	if result.Status == "error" {
-		fmt.Printf("Error: %s (#%d)\n", result.Error.ErrorMessage, result.Error.ErrorCode)
-		return
-	}
-	if result.IsNull() {
-		fmt.Println("AudD can't recognize any music in this file")
-		return
-	}
-	song := result.Result
-	fmt.Printf("%s - %s.\nTimecode: %s, album: %s. ℗ %s, %s\n\n" +
+	fmt.Printf("%s - %s.\nTimecode: %s, album: %s. ℗ %s, %s\n\n"+
 		"Listen: %s\nOr directly on:\n- Apple Music: %s, \n- Spotify: %s,\n- Deezer: %s.",
 		song.Artist, song.Title, song.Timecode, song.Album, song.Label, song.ReleaseDate,
 		song.SongLink, song.AppleMusic.URL, song.Spotify.ExternalUrls.Spotify, song.Deezer.Link)
@@ -56,7 +49,7 @@ func main()  {
 	}
 }
 ```
-</br>
+<br></br>
 
 If you run this code, you should see a result like
 
@@ -76,51 +69,40 @@ Preview: https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview118/v4/65/
 ## Recognize music from a local file
 You can also send your local files to the API.
 ```
-	parameters := map[string]string{"return": "timecode,apple_music,deezer,spotify"}
 	file, _ := os.Open("/path/to/example.mp3/path/to/example.mp3")
-	result, err := audd.RecognizeByFile(file, "test", parameters)
+	result, err := client.RecognizeByFile(file, "apple_music,deezer,spotify", nil)
 	file.Close()
 ```
-`file` in `audd.RecognizeByFile(file, "test", parameters)` could be any variable that implemeents io.Reader interface. If you have e.g. `var data []byte`, you can use `bytes.NewReader(data)` as `file`.
+`file` in `client.RecognizeByFile` could be any variable that implements the io.Reader interface. If you have e.g. `var data []byte`, you can use `bytes.NewReader(data)` as `file`.
+
+There is also the `Recognize` function that accepts io.Reader and []byte for local files; string and url.URL for HTTP addresses of files.
+
+Also, there's `client.UseExperimentalUploading()` that allows to start sending a file before it's loaded in the memory. Useful for large files sent to the enterprise endpoint (see [the scanFiles example](examples/scanFiles)). 
 
 ## Searching the lyrics
-It's also really easy with `audd.FindLyrics` function.
+It's easy with the `FindLyrics` function.
 ```
-package main
-
-import (
-	"fmt"
-	"github.com/AudDMusic/audd-go"
-)
-
-func main()  {
-	result, err := audd.FindLyrics("You were the shadow to my light", "test")
-	if err != nil {
-		panic(err)
-	}
-	if result.Status == "error" {
-		fmt.Printf("Error: %s (#%d)\n", result.Error.ErrorMessage, result.Error.ErrorCode)
-		return
-	}
-	if len(result.Result) == 0 {
+	result, err := client.FindLyrics("You were the shadow to my light", nil)
+	if len(result) == 0 {
 		fmt.Println("AudD can't find any lyrics by this query")
 		return
 	}
-	firstSong := result.Result[0]
+	firstSong := result[0]
 	fmt.Printf("First match: %s - %s\n\n%s", firstSong.Artist, firstSong.Title, firstSong.Lyrics)
-}
 ```
 <a name="use-cases"></a>
 # Use Cases
 How you can use the AudD [Music Recognition API](https://audd.io/):
-### UGC
-Detect music and identify songs from user-generated content in your apps. Create upload filters when the law requires. Use the metadata AudD Music Recognition API returns in your recommendation systems.
+### Content analysis
+Use our Music Recognition API to detect and identify songs in any audio content.
+
+Create upload filters for UGC when the law requires. Find out what songs are used in any content on the Internet – or in the videos uploaded to your server. Recognize music from hours-long DJ mixes. Analyze the trends. Display the recognition results to your users. Use the metadata the API returns for your recommendation systems.
 ### In-app music recognition and lyrics searching
-Detect and recognize music in your apps using AudD Music Recognition API. Identify songs for your users and display the lyrics of the recognized songs. Or just search lyrics by text.
-### Offline background music
-Calculate stats of offline music plays. Send files or audio streams from multiple devices in the real world into our Music Recognition API.
+Make your own music recognition application using AudD Music Recognition API. Detect and recognize music. Identify the songs your users are listening to and display the lyrics of the recognized songs. Or just let your users search lyrics by text.
 ### Audio streams
-Recognize the music that plays on radio stations with AudD real-time music recognition service for audio streams. Use the AudD Music DB, or upload your own songs DB.
+Use AudD real-time music recognition service for audio streams to identify the songs that are being played on radio stations (or any other streams).
+
+Monitor radio airplay, create radio songs charts. Get real-time insights. If you have your own content DB, we can recognize songs that you upload (it's cheaper).
 
 See https://streams.audd.io/ for more info.
 <a name="license"></a>
