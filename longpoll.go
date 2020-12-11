@@ -17,7 +17,7 @@ func getMD5Hash(text string) string {
 	return hex.EncodeToString(hasher.Sum(nil))
 }
 
-func (c *Client) getLongPollCategory(RadioID int) string {
+func (c *Client) getLongPollChannel(RadioID int) string {
 	return getMD5Hash(getMD5Hash(c.ApiToken) + strconv.Itoa(RadioID))[0:9]
 }
 
@@ -26,13 +26,17 @@ type LongPoll struct {
 	ResultsChan chan StreamCallback
 }
 
+// Stops the LongPoll connection
 func (lp *LongPoll) Stop() {
 	lp.stop <- struct {}{}
 }
 
-func (c *Client) ConnectToLongPoll(RadioID int) LongPoll {
+// Opens a LongPoll connection to the AudD API and receives the callbacks via LongPoll.
+// The callbacks will be sent to both the callback URL and all the LongPoll listeners.
+// Won't work unless some URL is set as the URL for callbacks. More info: docs.audd.io/streams/#longpoll
+func (c *Client) NewLongPoll(RadioID int) LongPoll {
 	u, _ := url.Parse(longPollingUrl)
-	lpC := glpclient.NewClient(u, c.getLongPollCategory(RadioID))
+	lpC := glpclient.NewClient(u, c.getLongPollChannel(RadioID))
 	lpC.LoggingEnabled = false
 	lp := LongPoll{
 		stop:    make(chan interface{}, 1),
