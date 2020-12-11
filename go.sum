@@ -1,3 +1,5 @@
+github.com/Mihonarium/golongpoll v1.2.0 h1:VU5xi0fivNMjBbCUuobO9gl5UXLbv5n4lbEvqnDAbKQ=
+github.com/Mihonarium/golongpoll v1.2.0/go.mod h1:/WQya0ObrWZhOvqig6ZdKENj7B01FXSdIHbyCcnE1ok=
 github.com/bogem/id3v2 v1.2.0 h1:hKDF+F1gOgQ5r1QmBCEZUk4MveJbKxCeIDSBU7CQ4oI=
 github.com/bogem/id3v2 v1.2.0/go.mod h1:t78PK5AQ56Q47kizpYiV6gtjj3jfxlz87oFpty8DYs8=
 golang.org/x/text v0.3.2 h1:tW2bmiBqwgJj/UpqtC8EpXEZVYOwU0yG4iWbprSVAcs=

@@ -54,6 +54,27 @@ type Stream struct {
 	StreamRunning bool   `json:"stream_running"`
 }
 
+type StreamCallback struct {
+	Status string `json:"status"`
+	Notification *StreamNotification `json:"notification"`
+	Result *StreamRecognitionResult `json:"result"`
+	Time int64 `json:"time"`
+}
+
+type StreamRecognitionResult struct {
+	RadioID    int    `json:"radio_id"`
+	Timestamp  string `json:"timestamp"`
+	PlayLength int `json:"play_length,omitempty"`
+	Results    []RecognitionResult `json:"results"`
+}
+
+type StreamNotification struct {
+	RadioID int `json:"radio_id"`
+	StreamRunning bool `json:"stream_running"`
+	Code int `json:"notification_code"`
+	Message string `json:"notification_message"`
+}
+
 type NapsterResult struct {
 	Type               string        `json:"type"`
 	ID                 string        `json:"id"`

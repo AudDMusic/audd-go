@@ -1,5 +1,5 @@
-[![PkgGoDev](https://pkg.go.dev/badge/github.com/AudDMusic/audd-go@v0.1.0)](https://pkg.go.dev/github.com/AudDMusic/audd-go@v0.1.0)
-[![MIT licensed](https://img.shields.io/badge/license-MIT-blue.svg?style=flat-square)](./LICENSE)
+[![GoDoc](https://godoc.org/github.com/AudDMusic/audd-go?status.svg)](https://godoc.org/github.com/AudDMusic/audd-go)
+[![MIT licensed](https://img.shields.io/badge/license-MIT-blue.svg)](./LICENSE)
 [![Twitter Follow](https://img.shields.io/twitter/follow/helloAudD.svg?style=social&label=Follow)](https://twitter.com/helloAudD)
 
 ## Table of Contents
@@ -15,18 +15,14 @@
 `go get github.com/AudDMusic/audd-go`
 
 ## API Token
-To send >10 requests, obtain an api_token from [our Dashboard](https://dashboard.audd.io/) and change "test" to the obtained token in `NewClient("test")`.
+To send >10 requests, obtain an api_token from [our Telegram bot](https://t.me/auddbot?start=api) and change "test" to the obtained token in `NewClient("test")`.
 
-## Send the files
-For `recognize` and `recognizeWithOffset` API methods, as well as for using the enterprise endpoint (which accepts long audio files, usually useful for hours-long mixes), you have to send a file for recognition. There are two ways to send files to our API, you can either
+## Sending the files
+For `recognize` and `recognizeWithOffset` API methods you have to send a file for recognition. There are two ways to send files to our API, you can either
 - 🔗 provide an HTTP URL of the file (our server will download and recognize the music from the file), or
 - 📤 post the file using multipart/form-data in the usual way that files are uploaded via the browser.
 
-There are functions for the both ways. `RecognizeByFile` and `RecognizeByUrl` for the `recognize` method, `RecognizeLongAudioByFile` and `RecognizeLongAudioByUrl` for the enterprise endpoint, `RecognizeHumming` and `RecognizeHummingByUrl` for the `recognizeWithOffset` method. The In the pairs, the first functions accept `io.Reader`, the second accept `string` with an URL.
-
-There are also `Recognize` and `RecognizeLongAudio` functions that accept an interface that could be `io.Reader` or `[]byte` for files, `string` or `url.URL` for URLs.
-
-### Recognize music from a file with URL
+## Recognize music from a file with URL
 It's really easy.
 ```
 package main
@@ -37,11 +33,10 @@ import (
 )
 
 func main()  {
-	// initialize the client with "test" as a token
+    // initialize the client with "test" as a token
 	client := audd.NewClient("test")
-	// recognize music in audd.tech/example1.mp3 and return Apple Music, Deezer and Spotify metadata
-	Url := "https://audd.tech/example1.mp3"
-	song, err := client.RecognizeByUrl(Url, "apple_music,deezer,spotify", nil)
+    // recognize music in audd.tech/example1.mp3 and return Apple Music, Deezer and Spotify metadata
+	song, err := client.RecognizeByUrl("https://audd.tech/example1.mp3", "apple_music,deezer,spotify", nil)
 	if err != nil {
 		panic(err)
 	}
@@ -71,47 +66,30 @@ Or directly on:
 Preview: https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview118/v4/65/07/f5/6507f5c5-dba8-f2d5-d56b-39dbb62a5f60/mzaf_1124211745011045566.plus.aac.p.m4a
 ```
 
-### Recognize music from a local file
+## Recognize music from a local file
 You can also send your local files to the API.
 ```
-file, _ := os.Open("/path/to/example.mp3/path/to/example.mp3")
-result, err := client.RecognizeByFile(file, "apple_music,deezer,spotify", nil)
-file.Close()
+	file, _ := os.Open("/path/to/example.mp3/path/to/example.mp3")
+	result, err := client.RecognizeByFile(file, "apple_music,deezer,spotify", nil)
+	file.Close()
 ```
+`file` in `client.RecognizeByFile` could be any variable that implements the io.Reader interface. If you have e.g. `var data []byte`, you can use `bytes.NewReader(data)` as `file`.
 
-`file` in `client.RecognizeByFile` could be any variable that implements the io.Reader interface.
+There is also the `Recognize` function that accepts io.Reader and []byte for local files; string and url.URL for HTTP addresses of files.
 
-### Search lyrics
+Also, there's `client.UseExperimentalUploading()` that allows to start sending a file before it's loaded in the memory. Useful for large files sent to the enterprise endpoint (see [the scanFiles example](examples/scanFiles)). 
+
+## Searching the lyrics
 It's easy with the `FindLyrics` function.
 ```
-result, err := client.FindLyrics("You were the shadow to my light", nil)
-if len(result) == 0 {
-	fmt.Println("AudD can't find any lyrics by this query")
-	return
-}
-firstSong := result[0]
-fmt.Printf("First match: %s - %s\n\n%s", firstSong.Artist, firstSong.Title, firstSong.Lyrics)
+	result, err := client.FindLyrics("You were the shadow to my light", nil)
+	if len(result) == 0 {
+		fmt.Println("AudD can't find any lyrics by this query")
+		return
+	}
+	firstSong := result[0]
+	fmt.Printf("First match: %s - %s\n\n%s", firstSong.Artist, firstSong.Title, firstSong.Lyrics)
 ```
-
-### Recognize music from a hour-long mix
-There are the enterprise endpoint that accepts long audio files (see [docs-e.audd.io](https://docs-e.audd.io)).
-```
-client.SetEndpoint(audd.EnterpriseAPIEndpoint)
-data := map[string]string{"skip": "3", "every": "1"}
-file := "https://audd.tech/djatwork_example.mp3"
-result, _ := client.RecognizeLongAudio(file, data)
-b, _ := json.Marshall(result)
-fmt.Println(string(b))
-```
-
-Also, there's `UseExperimentalUploading()` that allows to start sending a file before it's loaded in the memory. Useful for large local files sent to the enterprise endpoint (see [the example](examples/scanFiles)). 
-
-## Use other API methods
-
-See the [package docs](https://pkg.go.dev/github.com/AudDMusic/audd-go@v0.1.0). Most of the public API methods are available via functions with the same names. 
-
-For other methods, there are `Send`, `SendFile`, `SendUrl` functions that may help you with sending the API requests.
-
 <a name="use-cases"></a>
 # Use Cases
 How you can use the AudD [Music Recognition API](https://audd.io/):
