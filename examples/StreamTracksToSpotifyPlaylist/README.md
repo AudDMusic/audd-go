@@ -32,7 +32,7 @@ Please set the server's public address and the AudD API token
 Run with -h to see all the flags
 
 $ ./callbacksToSpotify -h
-Usage of ./testCToSpotify:
+Usage of ./callbacksToSpotify:
   -address string
         specify the server's public address (e.g. an IP)
   -api_token string
@@ -41,6 +41,8 @@ Usage of ./testCToSpotify:
         Spotify Client ID
   -client_secret string
         Spotify Client Secret
+  -longpoll
+        Use this if you don't want the script to change the callback URL
   -min_score int
         The minimum score (if a result has score below specified, it won't be processed) (default 85)
   -new_first
@@ -49,6 +51,8 @@ Usage of ./testCToSpotify:
         The ID of the Spotify playlist
   -port string
         the port to listen on (default "3022")
+  -radio_id int
+        If you haven't added the stream to AudD already using the addStream API method, you can specify the stream ID here (default 1)
   -stream_url string
         If you haven't added the stream to AudD already using the addStream API method, you can specify the stream URL here
 
