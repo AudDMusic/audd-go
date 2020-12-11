@@ -39,6 +39,7 @@ func (c *Client) ConnectToLongPoll(RadioID int) LongPoll {
 		ResultsChan: make(chan StreamCallback, 1),
 	}
 	go func() {
+		lpC.Start()
 		for {
 			select {
 			case e := <-lpC.EventsChan:
