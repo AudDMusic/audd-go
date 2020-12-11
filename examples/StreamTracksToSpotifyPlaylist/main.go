@@ -21,9 +21,6 @@ import (
 	"time"
 )
 
-// A simple CLI script that adds a stream to the AudD Music Recognition service, 
-// listens to callbacks with the recognition results, 
-// and adds all the tracks from the stream to a Spotify playlist
 
 var SpotifyClientID string
 var SpotifyClientSecret string
@@ -50,7 +47,12 @@ func main(){
 		"The minimum score (if a result has score below specified, it won't be processed)")
 	StreamUrl := flag.String("stream_url", "",
 		"If you haven't added the stream to AudD already using the addStream API method, " +
-		"you can specify the stream URL here")
+			"you can specify the stream URL here")
+	RadioID := flag.Int("radio_id", 1,
+		"If you haven't added the stream to AudD already using the addStream API method, " +
+			"you can specify the stream ID here")
+	UseLongPoll := flag.Bool("longpoll", false,
+		"Use this if you don't want the script to change the callback URL")
 	flag.Parse()
 
 	if *clientId == "" || *clientSecret == "" {
@@ -59,7 +61,7 @@ func main(){
 		fmt.Println("Run with -h to see all the flags")
 	}
 
-	if *address == "" || *apiToken == "" {
+	if !*UseLongPoll && (*address == "" || *apiToken == "") {
 		fmt.Println("Please set the server's public address and the AudD API token")
 		fmt.Println("Run with -h to see all the flags")
 		return
@@ -99,12 +101,26 @@ func main(){
 
 		CallbackAddr := "http://" + addr + "/?return=spotify&secret="+secretCallbackToken
 		auddClient := audd.NewClient(*apiToken)
-		err := auddClient.SetCallbackUrl(CallbackAddr, nil)
-		capture(err)
-
+		if !*UseLongPoll {
+			err := auddClient.SetCallbackUrl(CallbackAddr, nil)
+			capture(err)
+		} else {
+			lp := auddClient.NewLongPoll(*RadioID)
+			go func() {
+				for {
+					select {
+					case e := <-lp.ResultsChan:
+						if len(e.Result.Results) > 0 {
+							writeResult(e.Result.Results[0])
+						}
+					}
+				}
+				// lp.Stop()
+			}()
+		}
 		fmt.Println("Authorized!")
 		if *StreamUrl != "" {
-			err = auddClient.AddStream(*StreamUrl, 1, "before", nil)
+			err := auddClient.AddStream(*StreamUrl, *RadioID, "before", nil)
 			if !capture(err) {
 				fmt.Println("Added the stream to AudD")
 			}
@@ -166,7 +182,7 @@ func processCallback(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusForbidden)
 		return
 	}
-	var msg SuccessResult
+	var msg audd.StreamCallback
 	err = json.Unmarshal(b, &msg)
 	if capture(err) {
 		return
@@ -180,11 +196,10 @@ func processCallback(w http.ResponseWriter, r *http.Request) {
 			msg.Result.Results[0].Artist, msg.Result.Results[0].Title, msg.Result.Results[0].SongLink)
 		return
 	}
-	writeResult(msg.Result)
+	writeResult(msg.Result.Results[0])
 }
 
-func writeResult(r Songs) {
-	song := r.Results[0]
+func writeResult(song audd.RecognitionResult) {
 	if song.Spotify == nil {
 		fmt.Printf("Got a result without the Spotify data (%s - %s, %s)\n", song.Artist, song.Title, song.SongLink)
 		return
@@ -226,17 +241,6 @@ func writeResult(r Songs) {
 	fmt.Printf("Added a song to the playlist (%s - %s, %s)\n", song.Artist, song.Title, song.SongLink)
 }
 
-type SuccessResult struct {
-	Status string `json:"status"`
-	Result Songs `json:"result"`
-}
-type Songs struct {
-	RadioID    int    `json:"radio_id"`
-	Timestamp  string `json:"timestamp"`
-	PlayLength int `json:"play_length,omitempty"`
-	Results    []audd.RecognitionResult `json:"results"`
-}
-
 func capture(err error) bool {
 	if err == nil {
 		return false
@@ -262,8 +266,9 @@ func captureFunc(f func() error) (r bool) {
 	return
 }
 func init() {
-	/*err := raven.SetDSN("https://0e6a74905c1f4256800ffb17d238403f:3dc4c8265b764ee7ba7a221cc7c82428@sentry.io/1364039")
+	/*err := raven.SetDSN("")
 	if err != nil {
 		panic(err)
 	}*/
 }
+
