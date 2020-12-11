@@ -15,7 +15,7 @@
 `go get github.com/AudDMusic/audd-go`
 
 ## API Token
-To send >10 requests, obtain an api_token from [our Telegram bot](https://t.me/auddbot?start=api) and change "test" to the obtained token in `NewClient("test")`.
+To send >10 requests, obtain an api_token from [our Dashboard](https://dashboard.audd.io/) and change "test" to the obtained token in `NewClient("test")`.
 
 ## Send the files
 For `recognize` and `recognizeWithOffset` API methods, as well as for using the enterprise endpoint (which accepts long audio files, usually useful for hours-long mixes), you have to send a file for recognition. There are two ways to send files to our API, you can either
