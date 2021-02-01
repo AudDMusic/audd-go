@@ -121,6 +121,7 @@ func RecognizeMultipleFiles(dir string, client *audd.Client, setID3, short bool,
 					cover = "https://i3.ytimg.com/vi/"+strings.ReplaceAll(result[i].SongLink, "https://youtu.be/", "")+"/maxresdefault.jpg"
 				}
 				response, err := http.Get(cover)
+				defer closeBody(response)
 				if err != nil {
 					fmt.Println("Error: can't get the cover for", fileName, err)
 				} else {
@@ -196,6 +197,16 @@ func CreateCSV(songs map[string][]audd.RecognitionResult, path string, short boo
 func getCurrentDir() string {
 	currentFile, _ := os.Executable()
 	return filepath.Dir(currentFile)
+}
+
+func closeBody(resp *http.Response) {
+	if resp == nil {
+		return
+	}
+	if resp.Body == nil {
+		return
+	}
+	_ = resp.Body.Close()
 }
 
 func main() {
