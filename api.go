@@ -91,8 +91,8 @@ func (c *Client) SendFile(file io.Reader, parameters map[string]string) ([]byte,
 				fmt.Println(err)
 			}
 		}()
-		client := http.DefaultClient
-		response, err := client.Do(req)
+		response, err := http.DefaultClient.Do(req)
+		defer closeBody(response)
 		if err, any := <-errCh; any {
 			if err != nil {
 				return nil, err
@@ -125,8 +125,8 @@ func (c *Client) SendFile(file io.Reader, parameters map[string]string) ([]byte,
 		return nil, err
 	}
 	req.Header.Set("Content-Type", writer.FormDataContentType())
-	client := &http.Client{}
-	response, err := client.Do(req)
+	response, err := http.DefaultClient.Do(req)
+	defer closeBody(response)
 	if err != nil {
 		return nil, err
 	}
@@ -150,6 +150,7 @@ func (c *Client) Send(parameters map[string]string) ([]byte, error) {
 		fields.Add(key, value)
 	}
 	response, err := http.PostForm(c.Endpoint, fields)
+	defer closeBody(response)
 	if err != nil {
 		return nil, err
 	}
@@ -174,12 +175,16 @@ func (c *Client) SendUrlRequest(url string, parameters map[string]string, v inte
 	return handleApiResponse(result, err, v)
 }
 func getResponse(response *http.Response) ([]byte, error) {
-	responseBody, err := ioutil.ReadAll(response.Body)
-	err = response.Body.Close()
-	if err != nil {
-		return responseBody, err
+	return ioutil.ReadAll(response.Body)
+}
+func closeBody(resp *http.Response) {
+	if resp == nil {
+		return
 	}
-	return responseBody, nil
+	if resp.Body == nil {
+		return
+	}
+	_ = resp.Body.Close()
 }
 
 func handleApiResponse(requestResult []byte, err error, v interface{}) error {
