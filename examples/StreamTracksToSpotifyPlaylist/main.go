@@ -232,13 +232,24 @@ func writeResult(song audd.RecognitionResult) {
 			return
 		}
 		req.Header.Set("Content-Type", "application/json")
-		_, err = spotifyClient.h.Do(req)
+		resp, err := spotifyClient.h.Do(req)
+		defer closeBody(resp)
 		if capture(err) {
 			return
 		}
 	}
 
 	fmt.Printf("Added a song to the playlist (%s - %s, %s)\n", song.Artist, song.Title, song.SongLink)
+}
+
+func closeBody(resp *http.Response) {
+	if resp == nil {
+		return
+	}
+	if resp.Body == nil {
+		return
+	}
+	_ = resp.Body.Close()
 }
 
 func capture(err error) bool {
