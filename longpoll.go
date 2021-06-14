@@ -4,7 +4,6 @@ import (
 	"crypto/md5"
 	"encoding/hex"
 	"encoding/json"
-	"fmt"
 	glpclient "github.com/jcuga/golongpoll/client"
 	"net/url"
 	"strconv"
