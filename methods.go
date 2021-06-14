@@ -50,8 +50,8 @@ type RecognitionResponse struct {
 
 type RecognitionEnterpriseResponse struct {
 	Response
-	Result []RecognitionEnterpriseResult `json:"result"`
-	ExecutionTime string                 `json:"execution_time"`
+	Result        []RecognitionEnterpriseResult `json:"result"`
+	ExecutionTime string                        `json:"execution_time"`
 }
 
 type HummingRecognitionResponse struct {
@@ -73,7 +73,6 @@ type GetStreamsResponse struct {
 	Response
 	Result []Stream `json:"result"`
 }
-
 
 // Recognizes the music in the file
 func (c *Client) RecognizeByFile(file io.Reader, Return string, additionalParameters map[string]string) (RecognitionResult, error) {
@@ -104,7 +103,7 @@ func (c *Client) Recognize(v interface{}, Return string, additionalParameters ma
 	}
 }
 
-type call func (interface{}, map[string]string) error
+type call func(interface{}, map[string]string) error
 
 func (c *Client) recognize(call call, Return string, additionalParameters map[string]string) (RecognitionResult, error) {
 	if additionalParameters == nil {
@@ -117,7 +116,7 @@ func (c *Client) recognize(call call, Return string, additionalParameters map[st
 	if err != nil {
 		return RecognitionResult{}, err
 	}
-	if response.Warning != nil  && additionalParameters["warnings"]  != "off" {
+	if response.Warning != nil && additionalParameters["warnings"] != "off" {
 		log.Println(response.Warning.Error())
 	}
 	if response.Error != nil {
@@ -133,7 +132,7 @@ func (c *Client) RecognizeLongAudioByFile(file io.Reader, additionalParameters m
 }
 
 // Recognizes the music in long (even hours-long or days-long) audio files available by the Url
-func (c *Client) RecognizeLongAudioByUrl(Url string,  additionalParameters map[string]string) ([]RecognitionEnterpriseResult, error) {
+func (c *Client) RecognizeLongAudioByUrl(Url string, additionalParameters map[string]string) ([]RecognitionEnterpriseResult, error) {
 	return c.recognizeLongAudio(func(i interface{}, m map[string]string) error { return c.SendUrlRequest(Url, m, i) },
 		additionalParameters)
 }
@@ -151,7 +150,7 @@ func (c *Client) RecognizeLongAudio(v interface{}, additionalParameters map[stri
 	case url.URL:
 		return c.RecognizeLongAudioByUrl(t.String(), additionalParameters)
 	default:
-		return nil,	fmt.Errorf("expected a file as io.Reader or []byte, or a file URL as string or url.URL")
+		return nil, fmt.Errorf("expected a file as io.Reader or []byte, or a file URL as string or url.URL")
 	}
 }
 
@@ -162,7 +161,7 @@ func (c *Client) recognizeLongAudio(call call, additionalParameters map[string]s
 	if _, methodSet := additionalParameters["method"]; c.Endpoint == MainAPIEndpoint && !methodSet {
 		return nil, fmt.Errorf("can't send long audio files to the main endpoint, consider changing to audd.EnterpriseAPIEndpoint (enterprise.audd.io)")
 	}
-	if c.Endpoint != EnterpriseAPIEndpoint && additionalParameters["warnings"]  != "off" {
+	if c.Endpoint != EnterpriseAPIEndpoint && additionalParameters["warnings"] != "off" {
 		log.Println("warning: the endpoint used is not audd.EnterpriseAPIEndpoint (enterprise.audd.io)")
 	}
 	var response RecognitionEnterpriseResponse

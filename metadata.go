@@ -22,8 +22,8 @@ type RecognitionResult struct {
 }
 
 type RecognitionEnterpriseResult struct {
-	Songs []RecognitionResult `json:"songs"`
-	Offset string `json:"offset"`
+	Songs  []RecognitionResult `json:"songs"`
+	Offset string              `json:"offset"`
 }
 
 type HummingRecognitionResult struct {
@@ -55,24 +55,24 @@ type Stream struct {
 }
 
 type StreamCallback struct {
-	Status string `json:"status"`
-	Notification *StreamNotification `json:"notification"`
-	Result *StreamRecognitionResult `json:"result"`
-	Time int64 `json:"time"`
+	Status       string                   `json:"status"`
+	Notification *StreamNotification      `json:"notification"`
+	Result       *StreamRecognitionResult `json:"result"`
+	Time         int64                    `json:"time"`
 }
 
 type StreamRecognitionResult struct {
-	RadioID    int    `json:"radio_id"`
-	Timestamp  string `json:"timestamp"`
-	PlayLength int `json:"play_length,omitempty"`
+	RadioID    int                 `json:"radio_id"`
+	Timestamp  string              `json:"timestamp"`
+	PlayLength int                 `json:"play_length,omitempty"`
 	Results    []RecognitionResult `json:"results"`
 }
 
 type StreamNotification struct {
-	RadioID int `json:"radio_id"`
-	StreamRunning bool `json:"stream_running"`
-	Code int `json:"notification_code"`
-	Message string `json:"notification_message"`
+	RadioID       int    `json:"radio_id"`
+	StreamRunning bool   `json:"stream_running"`
+	Code          int    `json:"notification_code"`
+	Message       string `json:"notification_message"`
 }
 
 type NapsterResult struct {
@@ -193,7 +193,6 @@ type MusicbrainzRecordings struct {
 		Name  string `json:"name"`
 	} `json:"tags"`
 }
-
 
 type AppleMusicResult struct {
 	Previews []struct {
