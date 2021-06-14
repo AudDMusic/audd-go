@@ -60,9 +60,14 @@ func main(){
 			"and specify the client ID and client secret in the flags or SPOTIFY_ID and SPOTIFY_SECRET env vars")
 		fmt.Println("Run with -h to see all the flags")
 	}
-
-	if !*UseLongPoll && (*address == "" || *apiToken == "") {
-		fmt.Println("Please set the server's public address and the AudD API token")
+	
+	if(*address == "") {
+		fmt.Println("Please set the server's public address")
+		fmt.Println("Run with -h to see all the flags")
+		return
+	}
+	if *apiToken == "" && *UseLongPoll {
+		fmt.Println("Please set the AudD API token")
 		fmt.Println("Run with -h to see all the flags")
 		return
 	}
