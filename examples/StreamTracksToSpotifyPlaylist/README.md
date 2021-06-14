@@ -1,8 +1,8 @@
-This is an example of an interaction with the AudD API.
+*StreamTracksToSpotifyPlaylist* is an example of an interaction with the AudD API.
 
 ## What it does
 
-It's a tool for streams that once there a new song on a stream, adds it to a Spotify playlist.
+It's a tool for streams that adds new songs to a Spotify playlist once they appear on a stream.
 
 It works with YouTube streams and Spotify broadcasts, as well as with online radio stations. HLS, DASH, RTMP, M3U, other formats are also supported.
 
@@ -19,7 +19,7 @@ It also uses the [Spotify API](https://developer.spotify.com/documentation/web-a
 You'll need a server with a static IP address. 
 
 1. Obtain a token from the [Music Recognition API Dashboard](https://dashboard.audd.io/).
-2. Subscribe to or the music recognition for streams or contact us so we add a stream for free.
+2. Subscribe to or the music recognition for streams or contact us, so we add a stream for free.
 3. Create an App on the [Spotify for Developers Dashboard](https://developer.spotify.com/dashboard/applications) and get the credentials: Client ID and Client Secret.
 4. Run the binary and follow the instructions
 
@@ -62,7 +62,7 @@ Usage of ./callbacksToSpotify:
 
 ## How to build it
 
-The built binary for internal use is located at https://audd.tech/bin/callbacksToSpotify. 
+A prebuilt binary for internal use is located at https://audd.tech/bin/callbacksToSpotify. 
 Please do not use it (and never run stuff from the internet from root!), it's easy build the binary on your own instead:
 
 * Install Golang if you haven't already
@@ -75,7 +75,7 @@ export PATH=$PATH:/usr/local/go/bin
 go version
 ```
 
-* Make a new directory and download main.go
+* Make a new directory and download *main.go*
 ```
 mkdir callbacksToSpotify && cd callbacksToSpotify
 wget https://raw.githubusercontent.com/AudDMusic/audd-go/master/examples/StreamTracksToSpotifyPlaylist/main.go
