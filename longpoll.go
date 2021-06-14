@@ -4,9 +4,11 @@ import (
 	"crypto/md5"
 	"encoding/hex"
 	"encoding/json"
-	"github.com/Mihonarium/golongpoll/go-client/glpclient"
+	"fmt"
+	glpclient "github.com/jcuga/golongpoll/client"
 	"net/url"
 	"strconv"
+	"time"
 )
 
 const longPollingUrl = MainAPIEndpoint + "longpoll/"
@@ -22,13 +24,13 @@ func (c *Client) getLongPollChannel(RadioID int) string {
 }
 
 type LongPoll struct {
-	stop chan interface{}
+	stop        chan interface{}
 	ResultsChan chan StreamCallback
 }
 
 // Stops the LongPoll connection
 func (lp *LongPoll) Stop() {
-	lp.stop <- struct {}{}
+	lp.stop <- struct{}{}
 }
 
 // Opens a LongPoll connection to the AudD API and receives the callbacks via LongPoll.
@@ -36,19 +38,27 @@ func (lp *LongPoll) Stop() {
 // Won't work unless some URL is set as the URL for callbacks. More info: docs.audd.io/streams/#longpoll
 func (c *Client) NewLongPoll(RadioID int) LongPoll {
 	u, _ := url.Parse(longPollingUrl)
-	lpC := glpclient.NewClient(u, c.getLongPollChannel(RadioID))
-	lpC.LoggingEnabled = false
+	lpC, _ := glpclient.NewClient(glpclient.ClientOptions{
+		SubscribeUrl:   *u,
+		Category:       c.getLongPollChannel(RadioID),
+		LoggingEnabled: false,
+	})
 	lp := LongPoll{
-		stop:    make(chan interface{}, 1),
+		stop:        make(chan interface{}, 1),
 		ResultsChan: make(chan StreamCallback, 1),
 	}
 	go func() {
-		lpC.Start()
+		EventsChan := lpC.Start(time.Now())
 		for {
 			select {
-			case e := <-lpC.EventsChan:
+			case e := <-EventsChan:
+				fmt.Println("test4")
+				data, _ := json.Marshal(e.Data)
+				fmt.Println("test5")
 				var song StreamCallback
-				err := json.Unmarshal(e.Data, &song)
+				fmt.Println("test6")
+				err := json.Unmarshal(data, &song)
+				fmt.Println("test7")
 				if err == nil {
 					lp.ResultsChan <- song
 				}
