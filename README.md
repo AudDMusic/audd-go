@@ -15,15 +15,15 @@
 `go get github.com/AudDMusic/audd-go`
 
 ## API Token
-To send >10 requests, obtain an api_token from [our Telegram bot](https://t.me/auddbot?start=api) and change "test" to the obtained token in `NewClient("test")`.
+To send >10 requests, obtain a token from [our API Dashboard](https://dashboard.audd.io/) and change "test" to the obtained token in `NewClient("test")`.
 
 ## Sending the files
-For `recognize` and `recognizeWithOffset` API methods you have to send a file for recognition. There are two ways to send files to our API, you can either
+For `recognize` and `recognizeWithOffset` API methods, you have to send a file for recognition. There are two ways to send files to our API: you can either
 - 🔗 provide an HTTP URL of the file (our server will download and recognize the music from the file), or
-- 📤 post the file using multipart/form-data in the usual way that files are uploaded via the browser.
+- 📤 post the file using multipart/form-data in the usual way a browser uploads files.
 
-## Recognize music from a file with URL
-It's really easy.
+## Recognize music from a file with a URL
+It's straightforward.
 ```
 package main
 
@@ -73,11 +73,11 @@ You can also send your local files to the API.
 	result, err := client.RecognizeByFile(file, "apple_music,deezer,spotify", nil)
 	file.Close()
 ```
-`file` in `client.RecognizeByFile` could be any variable that implements the io.Reader interface. If you have e.g. `var data []byte`, you can use `bytes.NewReader(data)` as `file`.
+`file` in `client.RecognizeByFile` could be any variable that implements the io.Reader interface. If you have, e.g., `var data []byte`, you can use `bytes.NewReader(data)` as `file`.
 
 There is also the `Recognize` function that accepts io.Reader and []byte for local files; string and url.URL for HTTP addresses of files.
 
-Also, there's `client.UseExperimentalUploading()` that allows to start sending a file before it's loaded in the memory. Useful for large files sent to the enterprise endpoint (see [the scanFiles example](examples/scanFiles)). 
+Also, there's `client.UseExperimentalUploading()` that allows starting sending a file before it's loaded in the memory. Useful for large files sent to the enterprise endpoint (see [the scanFiles example](examples/scanFiles)). 
 
 ## Searching the lyrics
 It's easy with the `FindLyrics` function.
@@ -102,7 +102,7 @@ Make your own music recognition application using AudD Music Recognition API. De
 ### Audio streams
 Use AudD real-time music recognition service for audio streams to identify the songs that are being played on radio stations (or any other streams).
 
-Monitor radio airplay, create radio songs charts. Get real-time insights. If you have your own content DB, we can recognize songs that you upload (it's cheaper).
+Monitor radio airplay, create radio song charts. Get real-time insights. If you have your own content DB, we can recognize songs that you upload (it's cheaper).
 
 See https://streams.audd.io/ for more info.
 <a name="license"></a>
