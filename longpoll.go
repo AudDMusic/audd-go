@@ -52,13 +52,9 @@ func (c *Client) NewLongPoll(RadioID int) LongPoll {
 		for {
 			select {
 			case e := <-EventsChan:
-				fmt.Println("test4")
 				data, _ := json.Marshal(e.Data)
-				fmt.Println("test5")
 				var song StreamCallback
-				fmt.Println("test6")
 				err := json.Unmarshal(data, &song)
-				fmt.Println("test7")
 				if err == nil {
 					lp.ResultsChan <- song
 				}
