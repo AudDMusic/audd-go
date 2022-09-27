@@ -1,4 +1,4 @@
-module github.com/AudDMusic/audd-go
+module github.com/veritone/audd-go
 
 go 1.15
 
