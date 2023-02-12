@@ -3,7 +3,7 @@ module github.com/AudDMusic/audd-go/examples
 go 1.19
 
 require (
-	github.com/AudDMusic/audd-go v0.2.4
+	github.com/AudDMusic/audd-go v0.2.5
 	github.com/bogem/id3v2/v2 v2.1.4
 	github.com/zmb3/spotify v1.3.0
 	golang.org/x/oauth2 v0.5.0
