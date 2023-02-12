@@ -1,4 +1,3 @@
-
 /*
  * Copyright (c) 2020 AudD, LLC. All rights reserved.
  * Copyright (c) 2020 Mikhail Samin. All rights reserved.
@@ -37,7 +36,7 @@ import (
 	"flag"
 	"fmt"
 	"github.com/AudDMusic/audd-go"
-	"github.com/bogem/id3v2"
+	"github.com/bogem/id3v2/v2"
 	"io/ioutil"
 	"log"
 	"net/http"
@@ -61,7 +60,7 @@ func RecognizeMultipleFiles(dir string, client *audd.Client, setID3, short bool,
 		if fileInfo.IsDir() { // Skip folders. As an option, you can implement a recursion
 			continue
 		}
-		if i % 15 == 0 { // Send files by bunches
+		if i%15 == 0 { // Send files by bunches
 			wg.Wait()
 		}
 		wg.Add(1)
@@ -117,8 +116,8 @@ func RecognizeMultipleFiles(dir string, client *audd.Client, setID3, short bool,
 				mp3File.SetTitle(result[i].Title)
 				mp3File.SetAlbum(result[i].Album)
 				cover := result[i].SongLink + "?thumb"
-				if strings.Contains(result[i].SongLink, "youtu.be/"){
-					cover = "https://i3.ytimg.com/vi/"+strings.ReplaceAll(result[i].SongLink, "https://youtu.be/", "")+"/maxresdefault.jpg"
+				if strings.Contains(result[i].SongLink, "youtu.be/") {
+					cover = "https://i3.ytimg.com/vi/" + strings.ReplaceAll(result[i].SongLink, "https://youtu.be/", "") + "/maxresdefault.jpg"
 				}
 				response, err := http.Get(cover)
 				defer closeBody(response)
@@ -167,7 +166,7 @@ func CreateCSV(songs map[string][]audd.RecognitionResult, path string, short boo
 					song.Album, song.Label, song.ReleaseDate, song.SongLink})
 			} else {
 				records = append(records, []string{name, song.SongLength, song.Timecode, song.Artist, song.Title,
-					song.Album,	song.Label, song.ReleaseDate, song.SongLink})
+					song.Album, song.Label, song.ReleaseDate, song.SongLink})
 			}
 		}
 	}
