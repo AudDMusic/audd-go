@@ -19,6 +19,8 @@ type RecognitionResult struct {
 	Score       int                     `json:"score,omitempty"`
 	SongLength  string                  `json:"song_length,omitempty"`
 	AudioID     int                     `json:"audio_id,omitempty"`
+	StartOffset int                     `json:"start_offset,omitempty"`
+	EndOffset   int                     `json:"end_offset,omitempty"`
 }
 
 type RecognitionEnterpriseResult struct {
