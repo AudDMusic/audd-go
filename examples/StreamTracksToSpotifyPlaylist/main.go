@@ -7,7 +7,6 @@ import (
 	"flag"
 	"fmt"
 	"github.com/AudDMusic/audd-go"
-	//"github.com/getsentry/raven-go"
 	"github.com/zmb3/spotify"
 	"golang.org/x/oauth2"
 	spotifyAuth "golang.org/x/oauth2/spotify"
@@ -21,7 +20,6 @@ import (
 	"time"
 )
 
-
 var SpotifyClientID string
 var SpotifyClientSecret string
 var MinScore int
@@ -34,7 +32,7 @@ var clientCh = make(chan spotifyClients, 0)
 var state string
 var stateMu = &sync.Mutex{}
 
-func main(){
+func main() {
 	clientId := flag.String("client_id", "", "Spotify Client ID")
 	clientSecret := flag.String("client_secret", "", "Spotify Client Secret")
 	playlistId := flag.String("playlist_id", "", "The ID of the Spotify playlist")
@@ -46,10 +44,10 @@ func main(){
 	minScore := flag.Int("min_score", 85,
 		"The minimum score (if a result has score below specified, it won't be processed)")
 	StreamUrl := flag.String("stream_url", "",
-		"If you haven't added the stream to AudD already using the addStream API method, " +
+		"If you haven't added the stream to AudD already using the addStream API method, "+
 			"you can specify the stream URL here")
 	RadioID := flag.Int("radio_id", 1,
-		"If you haven't added the stream to AudD already using the addStream API method, " +
+		"If you haven't added the stream to AudD already using the addStream API method, "+
 			"you can specify the stream ID here")
 	UseLongPoll := flag.Bool("longpoll", false,
 		"Use this if you don't want the script to change the callback URL")
@@ -60,8 +58,8 @@ func main(){
 			"and specify the client ID and client secret in the flags or SPOTIFY_ID and SPOTIFY_SECRET env vars")
 		fmt.Println("Run with -h to see all the flags")
 	}
-	
-	if(*address == "") {
+
+	if *address == "" {
 		fmt.Println("Please set the server's public address")
 		fmt.Println("Run with -h to see all the flags")
 		return
@@ -79,21 +77,20 @@ func main(){
 	SpotifyClientID = *clientId
 	SpotifyClientSecret = *clientSecret
 
-	addr := *address+":"+*port
+	addr := *address + ":" + *port
 
 	var oauthConfig = oauth2.Config{
-		ClientID: SpotifyClientID,
+		ClientID:     SpotifyClientID,
 		ClientSecret: SpotifyClientSecret,
-		Scopes: []string{"playlist-modify-public", "playlist-modify-private"},
-		Endpoint: spotifyAuth.Endpoint,
-		RedirectURL: "http://" + addr + "/auth/",
+		Scopes:       []string{"playlist-modify-public", "playlist-modify-private"},
+		Endpoint:     spotifyAuth.Endpoint,
+		RedirectURL:  "http://" + addr + "/auth/",
 	}
-
 
 	fmt.Println("Starting server at", addr)
 
 	go func() {
-		fmt.Println("1. Go to https://developer.spotify.com/dashboard/applications/"+SpotifyClientID)
+		fmt.Println("1. Go to https://developer.spotify.com/dashboard/applications/" + SpotifyClientID)
 		fmt.Println(`2. Open "Edit Settings"`)
 		fmt.Println("3. Add a new Redirect URI:", oauthConfig.RedirectURL)
 		newState := RandString(10)
@@ -102,9 +99,9 @@ func main(){
 		stateMu.Unlock()
 		authUrl := oauthConfig.AuthCodeURL(newState)
 		fmt.Println("4. Authorize on", authUrl)
-		spotifyClient = <- clientCh
+		spotifyClient = <-clientCh
 
-		CallbackAddr := "http://" + addr + "/?return=spotify&secret="+secretCallbackToken
+		CallbackAddr := "http://" + addr + "/?return=spotify&secret=" + secretCallbackToken
 		auddClient := audd.NewClient(*apiToken)
 		if !*UseLongPoll {
 			err := auddClient.SetCallbackUrl(CallbackAddr, nil)
@@ -145,6 +142,7 @@ type spotifyClients struct {
 
 var seededRand = rand.New(
 	rand.NewSource(time.Now().UnixNano()))
+
 func RandString(length int) string {
 	charset := "abcdefghijklmnopqrstuvwxyz" +
 		"ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
@@ -287,4 +285,3 @@ func init() {
 		panic(err)
 	}*/
 }
-

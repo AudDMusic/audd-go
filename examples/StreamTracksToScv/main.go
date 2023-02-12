@@ -6,7 +6,6 @@ import (
 	"flag"
 	"fmt"
 	"github.com/AudDMusic/audd-go"
-	"github.com/getsentry/raven-go"
 	"os"
 	"runtime"
 	"strconv"
@@ -18,7 +17,7 @@ var fileW *csv.Writer
 var fileMu = &sync.Mutex{}
 var MinScore int
 
-func main(){
+func main() {
 	pathToCSV := flag.String("csv", "audd.csv", "Path to the .csv file")
 	apiToken := flag.String("api_token", "", "the AudD API token")
 	minScore := flag.Int("min_score", 85, "The minimum score (if a result has score below specified, it won't be processed)")
@@ -111,7 +110,7 @@ func writeResult(r *audd.StreamRecognitionResult) {
 	fileMu.Lock()
 	defer fileMu.Unlock()
 	song := r.Results[0]
-	capture(fileW.Write([]string{r.Timestamp, strconv.Itoa(r.RadioID), song.ISRC, song.UPC,	song.Artist, song.Title,
+	capture(fileW.Write([]string{r.Timestamp, strconv.Itoa(r.RadioID), song.ISRC, song.UPC, song.Artist, song.Title,
 		song.Album, song.Label, song.ReleaseDate, strconv.Itoa(song.Score), strconv.Itoa(r.PlayLength)}))
 	fileW.Flush()
 }
