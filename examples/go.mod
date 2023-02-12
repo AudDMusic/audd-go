@@ -1,4 +1,4 @@
-module audd/audd-go/examples
+module github.com/AudDMusic/audd-go/examples
 
 go 1.19
 
