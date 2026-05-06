@@ -1,0 +1,47 @@
+name: Contract Tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  schedule:
+    # Daily at 06:00 UTC; catches latest-spec drift even without a push.
+    - cron: "0 6 * * *"
+  repository_dispatch:
+    types: [openapi-updated]
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  contract:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out audd-go
+        uses: actions/checkout@v4
+      - name: Check out audd-openapi (latest main)
+        uses: actions/checkout@v4
+        with:
+          repository: AudDMusic/audd-openapi
+          path: audd-openapi
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.23"
+      - name: Run contract suite
+        env:
+          AUDD_OPENAPI_FIXTURES: ${{ github.workspace }}/audd-openapi/fixtures
+        run: go test -count=1 -run Contract -v ./...
+      - name: Open issue on failure
+        if: failure() && github.event_name != 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title: `contract drift detected (${context.workflow})`,
+              body: `Contract tests failed against the latest audd-openapi spec.\n\nRun: ${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`,
+              labels: ['contract-drift']
+            })
