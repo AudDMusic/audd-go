@@ -1,0 +1,6 @@
+/vendor/
+*.test
+*.out
+coverage.out
+.env
+.DS_Store
