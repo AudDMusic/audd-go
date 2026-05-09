@@ -5,4 +5,4 @@
 package audd
 
 // Version is the SDK version reported in the User-Agent header.
-const Version = "1.5.10"
+const Version = "1.5.11"

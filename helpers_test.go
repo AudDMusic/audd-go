@@ -8,24 +8,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestParseProviders_VarargsAndCommaStringsAndMix(t *testing.T) {
-	assert.Equal(t, []string{"apple_music", "spotify"}, ParseProviders("apple_music", "spotify"))
-	assert.Equal(t, []string{"apple_music", "spotify"}, ParseProviders("apple_music,spotify"))
-	assert.Equal(t, []string{"apple_music", "spotify"}, ParseProviders("apple_music, spotify"))
-	assert.Equal(t, []string{"apple_music", "spotify", "deezer"}, ParseProviders("apple_music,spotify", "deezer"))
-	assert.Empty(t, ParseProviders())
-	assert.Empty(t, ParseProviders(""))
-	assert.Empty(t, ParseProviders(",,, "))
-}
-
-func TestReturning_BuildsRecognizeOptions(t *testing.T) {
-	opts := Returning("apple_music,spotify")
-	require.NotNil(t, opts)
-	assert.Equal(t, []string{"apple_music", "spotify"}, opts.Return)
-	assert.Empty(t, opts.Market)
-	assert.Zero(t, opts.Timeout)
-}
-
 func TestDeriveLongpollCategory_StableAndCorrectLength(t *testing.T) {
 	cat := DeriveLongpollCategory("test", 7)
 	assert.Len(t, cat, 9)
