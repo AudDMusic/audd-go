@@ -129,15 +129,25 @@ If you need provider-specific metadata blocks, opt in per call. Request only
 what you need — each provider you ask for adds latency:
 
 ```go
-result, _ := client.Recognize("https://audd.tech/example.mp3", &audd.RecognizeOptions{
-    Return: []string{"apple_music", "spotify"},
-})
+result, _ := client.Recognize("https://audd.tech/example.mp3",
+    audd.Returning("apple_music", "spotify"))
 fmt.Println("Apple Music:", result.AppleMusic.URL)
 fmt.Println("Spotify URI:", result.Spotify.URI)
 fmt.Println("Preview:    ", result.PreviewURL())  // first preview across requested providers, "" if none
 ```
 
-Valid `Return` values: `apple_music`, `spotify`, `deezer`, `napster`,
+`Returning` is a convenience that accepts varargs *or* a comma-separated
+string — `audd.Returning("apple_music,spotify")` is equivalent. For other
+options (`Market`, `Timeout`), construct the struct directly:
+
+```go
+result, _ := client.Recognize(url, &audd.RecognizeOptions{
+    Return: audd.ParseProviders("apple_music,spotify"),
+    Market: "us",
+})
+```
+
+Valid provider values: `apple_music`, `spotify`, `deezer`, `napster`,
 `musicbrainz`. The metadata-block fields (`AppleMusic`, `Spotify`, `Deezer`,
 `Napster`) are pointers and may be nil; `MusicBrainz` is a slice — guard
 accordingly.
@@ -290,6 +300,60 @@ http.HandleFunc("/audd/callback", func(w http.ResponseWriter, r *http.Request) {
 
 See [`examples/streams_callback_handler`](./examples/streams_callback_handler)
 and [`examples/streams_setup`](./examples/streams_setup) for runnable code.
+
+#### Other Go HTTP frameworks
+
+`HandleCallback` accepts any `*http.Request`, and `ParseCallback` accepts the
+raw body bytes — register the route in your framework, then hand off to the
+SDK. The match/notification handling is identical to the stdlib example
+above; only the route wiring differs.
+
+`gin` — `c.Request` is the underlying `*http.Request`:
+
+```go
+r := gin.Default()
+r.POST("/audd/callback", func(c *gin.Context) {
+    match, notif, err := audd.HandleCallback(c.Request)
+    if err != nil { c.AbortWithError(http.StatusBadRequest, err); return }
+    _ = match; _ = notif // dispatch as in the stdlib example
+})
+```
+
+`chi`:
+
+```go
+r := chi.NewRouter()
+r.Post("/audd/callback", func(w http.ResponseWriter, r *http.Request) {
+    match, notif, err := audd.HandleCallback(r)
+    if err != nil { http.Error(w, err.Error(), http.StatusBadRequest); return }
+    _ = match; _ = notif
+})
+```
+
+`echo`:
+
+```go
+e := echo.New()
+e.POST("/audd/callback", func(c echo.Context) error {
+    match, notif, err := audd.HandleCallback(c.Request())
+    if err != nil { return c.String(http.StatusBadRequest, err.Error()) }
+    _ = match; _ = notif
+    return c.NoContent(http.StatusOK)
+})
+```
+
+`gorilla/mux`:
+
+```go
+r := mux.NewRouter()
+r.HandleFunc("/audd/callback", func(w http.ResponseWriter, r *http.Request) {
+    match, notif, err := audd.HandleCallback(r)
+    if err != nil { http.Error(w, err.Error(), http.StatusBadRequest); return }
+    _ = match; _ = notif
+}).Methods(http.MethodPost)
+```
+
+For frameworks that expose only the body bytes, call `audd.ParseCallback(body)` directly.
 
 ### Receiving events without a callback URL (longpoll)
 

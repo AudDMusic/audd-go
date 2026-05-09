@@ -12,6 +12,42 @@ import (
 	"strings"
 )
 
+// Returning is a convenience constructor for the common case of opting into
+// provider metadata on Recognize. Accepts varargs of provider names,
+// comma-separated strings, or a mix:
+//
+//	client.Recognize(url, audd.Returning("apple_music", "spotify"))
+//	client.Recognize(url, audd.Returning("apple_music,spotify"))
+//
+// For other RecognizeOptions fields (Market, Timeout), construct the struct
+// directly: &audd.RecognizeOptions{Return: ..., Market: "us"}.
+func Returning(providers ...string) *RecognizeOptions {
+	return &RecognizeOptions{Return: ParseProviders(providers...)}
+}
+
+// ParseProviders normalizes a list of provider strings, splitting any
+// comma-separated entries and trimming whitespace. Empty entries are dropped.
+//
+// Useful when constructing RecognizeOptions, EnterpriseOptions, or
+// SetCallbackUrlOptions directly:
+//
+//	&audd.RecognizeOptions{
+//	    Return: audd.ParseProviders("apple_music,spotify"),
+//	    Market: "us",
+//	}
+func ParseProviders(providers ...string) []string {
+	var out []string
+	for _, p := range providers {
+		for _, item := range strings.Split(p, ",") {
+			item = strings.TrimSpace(item)
+			if item != "" {
+				out = append(out, item)
+			}
+		}
+	}
+	return out
+}
+
 // DeriveLongpollCategory computes the 9-char longpoll category for a token +
 // radio_id. Pure function — no network call.
 //
