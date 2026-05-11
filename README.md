@@ -130,7 +130,7 @@ what you need — each provider you ask for adds latency:
 
 ```go
 result, _ := client.Recognize("https://audd.tech/example.mp3", &audd.RecognizeOptions{
-    Return: []string{"apple_music", "spotify"},
+    Return: "apple_music,spotify",
 })
 fmt.Println("Apple Music:", result.AppleMusic.URL)
 fmt.Println("Spotify URI:", result.Spotify.URI)
@@ -249,7 +249,7 @@ streams := client.Streams()
 
 // 1. Tell AudD where to POST recognition results for your account.
 streams.SetCallbackUrl("https://your.app/audd/callback", &audd.SetCallbackUrlOptions{
-    ReturnMetadata: []string{"apple_music", "spotify"},
+    ReturnMetadata: "apple_music,spotify",
 })
 
 // 2. Add streams to monitor.
@@ -344,7 +344,7 @@ namespaced:
 
 | v0 | v1 |
 |---|---|
-| `client.RecognizeByUrl(url, "apple_music", nil)` | `client.Recognize(url, &audd.RecognizeOptions{Return: []string{"apple_music"}})` |
+| `client.RecognizeByUrl(url, "apple_music", nil)` | `client.Recognize(url, &audd.RecognizeOptions{Return: "apple_music"})` |
 | `client.RecognizeByFile(reader, "", nil)` | `client.Recognize(reader, nil)` |
 | `client.AddStream(url, 7, "before", nil)` | `client.Streams().Add(audd.AddStreamRequest{URL: url, RadioID: 7, Callbacks: "before"})` |
 | `client.FindLyrics(query, nil)` | `client.Advanced().FindLyrics(query)` |

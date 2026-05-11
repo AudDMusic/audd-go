@@ -25,7 +25,7 @@ func main() {
 
 	// ---- v1 (preferred) ------------------------------------------------
 	resultV1, err := client.Recognize("https://audd.tech/example.mp3", &audd.RecognizeOptions{
-		Return: []string{"apple_music"},
+		Return: "apple_music",
 	})
 	if err != nil {
 		log.Fatal(err)

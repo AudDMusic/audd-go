@@ -77,20 +77,20 @@ func TestParseCallback_NeitherResultNorNotification(t *testing.T) {
 }
 
 func TestAddReturnToURL_Empty_NoChange(t *testing.T) {
-	got, err := addReturnToURL("https://x", nil)
+	got, err := addReturnToURL("https://x", "")
 	require.NoError(t, err)
 	assert.Equal(t, "https://x", got)
 }
 
 func TestAddReturnToURL_AppendsCSV(t *testing.T) {
-	got, err := addReturnToURL("https://x", []string{"apple_music", "spotify"})
+	got, err := addReturnToURL("https://x", "apple_music,spotify")
 	require.NoError(t, err)
 	parsed, _ := url.Parse(got)
 	assert.Equal(t, "apple_music,spotify", parsed.Query().Get("return"))
 }
 
 func TestAddReturnToURL_PreservesExistingQuery(t *testing.T) {
-	got, err := addReturnToURL("https://x?foo=1", []string{"deezer"})
+	got, err := addReturnToURL("https://x?foo=1", "deezer")
 	require.NoError(t, err)
 	parsed, _ := url.Parse(got)
 	assert.Equal(t, "1", parsed.Query().Get("foo"))
@@ -98,7 +98,14 @@ func TestAddReturnToURL_PreservesExistingQuery(t *testing.T) {
 }
 
 func TestAddReturnToURL_DuplicateReturn_ErrsOut(t *testing.T) {
-	_, err := addReturnToURL("https://x?return=apple_music", []string{"spotify"})
+	_, err := addReturnToURL("https://x?return=apple_music", "spotify")
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "already contains")
+}
+
+func TestJoinProviders(t *testing.T) {
+	assert.Equal(t, "", JoinProviders())
+	assert.Equal(t, "apple_music", JoinProviders("apple_music"))
+	assert.Equal(t, "apple_music,spotify", JoinProviders("apple_music", "spotify"))
+	assert.Equal(t, "apple_music,spotify,deezer", JoinProviders("apple_music", "spotify", "deezer"))
 }

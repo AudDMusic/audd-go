@@ -158,7 +158,7 @@ func TestRecognize_ReturnAndMarketArePropagated(t *testing.T) {
 	defer func() { _ = c.Close() }()
 
 	_, err := c.RecognizeContext(context.Background(), "https://example.com/song.mp3", &RecognizeOptions{
-		Return: []string{"apple_music", "spotify"},
+		Return: "apple_music,spotify",
 		Market: "us",
 	})
 	require.NoError(t, err)

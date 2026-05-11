@@ -47,7 +47,7 @@ func TestIntegration_RecognizeURL_WithReturn(t *testing.T) {
 	defer cancel()
 
 	res, err := c.RecognizeContext(ctx, "https://audd.tech/example.mp3", &RecognizeOptions{
-		Return: []string{"apple_music"},
+		Return: "apple_music",
 	})
 	require.NoError(t, err)
 	require.NotNil(t, res)

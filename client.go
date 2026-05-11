@@ -9,7 +9,6 @@ import (
 	"net/http"
 	"os"
 	"strconv"
-	"strings"
 	"sync"
 	"time"
 )
@@ -250,9 +249,10 @@ func (c *Client) Advanced() *AdvancedClient {
 
 // RecognizeOptions controls the standard recognize endpoint.
 type RecognizeOptions struct {
-	// Return is the list of metadata sources to include.
-	// Valid values: "apple_music", "spotify", "deezer", "napster", "musicbrainz".
-	Return []string
+	// Return is the comma-separated list of metadata sources to include
+	// (e.g. "apple_music,spotify"). Valid values: "apple_music", "spotify",
+	// "deezer", "napster", "musicbrainz".
+	Return string
 	// Market is the ISO country code (server default: "us").
 	Market string
 	// Timeout overrides the per-request HTTP timeout for this call only.
@@ -261,7 +261,10 @@ type RecognizeOptions struct {
 
 // EnterpriseOptions controls the enterprise recognize endpoint.
 type EnterpriseOptions struct {
-	Return           []string
+	// Return is the comma-separated list of metadata sources to include
+	// (e.g. "apple_music,spotify"). Valid values: "apple_music", "spotify",
+	// "deezer", "napster", "musicbrainz".
+	Return           string
 	Skip             *int
 	Every            *int
 	Limit            *int
@@ -341,8 +344,8 @@ func (c *Client) applyRecognizeOpts(fields *formFields, opts *RecognizeOptions) 
 	if fields.Data == nil {
 		fields.Data = map[string]string{}
 	}
-	if r := joinReturn(opts.Return); r != "" {
-		fields.Data["return"] = r
+	if opts.Return != "" {
+		fields.Data["return"] = opts.Return
 	}
 	if opts.Market != "" {
 		fields.Data["market"] = opts.Market
@@ -410,8 +413,8 @@ func (c *Client) applyEnterpriseOpts(fields *formFields, opts *EnterpriseOptions
 	if fields.Data == nil {
 		fields.Data = map[string]string{}
 	}
-	if r := joinReturn(opts.Return); r != "" {
-		fields.Data["return"] = r
+	if opts.Return != "" {
+		fields.Data["return"] = opts.Return
 	}
 	if opts.Skip != nil {
 		fields.Data["skip"] = strconv.Itoa(*opts.Skip)
@@ -431,14 +434,6 @@ func (c *Client) applyEnterpriseOpts(fields *formFields, opts *EnterpriseOptions
 	if opts.AccurateOffsets != nil {
 		fields.Data["accurate_offsets"] = boolStr(*opts.AccurateOffsets)
 	}
-}
-
-// joinReturn joins a return-spec list into the comma-string the server expects.
-func joinReturn(r []string) string {
-	if len(r) == 0 {
-		return ""
-	}
-	return strings.Join(r, ",")
 }
 
 func boolStr(b bool) string {

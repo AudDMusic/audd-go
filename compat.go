@@ -3,7 +3,6 @@ package audd
 import (
 	"context"
 	"io"
-	"strings"
 )
 
 // Backwards-compatibility shims for the existing flat API of github.com/AudDMusic/audd-go.
@@ -127,13 +126,11 @@ func (c *Client) AddSongToCustomDB(audioID int, source any) error {
 }
 
 // legacyRecognizeOpts converts the v0-API "metadata + options map" pair into a
-// new-style *RecognizeOptions. Treats `metadata` as a comma-separated list of
-// "return" values (matches the v0 convention).
+// new-style *RecognizeOptions. The v0 `metadata` arg already matches the
+// comma-separated form RecognizeOptions.Return expects, so it passes through
+// unchanged.
 func legacyRecognizeOpts(metadata string, options map[string]string) *RecognizeOptions {
-	opts := &RecognizeOptions{}
-	if metadata != "" {
-		opts.Return = strings.Split(metadata, ",")
-	}
+	opts := &RecognizeOptions{Return: metadata}
 	if v, ok := options["market"]; ok {
 		opts.Market = v
 	}

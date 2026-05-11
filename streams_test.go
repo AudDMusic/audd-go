@@ -38,7 +38,7 @@ func TestStreams_SetCallbackUrl_AppendsReturnMetadata(t *testing.T) {
 	defer func() { _ = c.Close() }()
 
 	require.NoError(t, c.Streams().SetCallbackUrl("https://example.com/cb",
-		&SetCallbackUrlOptions{ReturnMetadata: []string{"apple_music", "spotify"}}))
+		&SetCallbackUrlOptions{ReturnMetadata: "apple_music,spotify"}))
 	parsed, _ := url.Parse(seenURL)
 	assert.Equal(t, "apple_music,spotify", parsed.Query().Get("return"))
 }
@@ -49,7 +49,7 @@ func TestStreams_SetCallbackUrl_DuplicateReturn_ErrsOut(t *testing.T) {
 	})
 	defer func() { _ = c.Close() }()
 	err := c.Streams().SetCallbackUrl("https://example.com/cb?return=apple_music",
-		&SetCallbackUrlOptions{ReturnMetadata: []string{"spotify"}})
+		&SetCallbackUrlOptions{ReturnMetadata: "spotify"})
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "already contains")
 }

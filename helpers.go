@@ -115,18 +115,26 @@ func parseMatch(resultRaw json.RawMessage, fullBody []byte) (*StreamCallbackMatc
 	}, nil
 }
 
+// JoinProviders joins provider names into the comma-separated string
+// accepted by RecognizeOptions.Return and SetCallbackUrlOptions.ReturnMetadata.
+// Useful when the caller already has a []string in hand from configuration
+// or user input.
+func JoinProviders(providers ...string) string {
+	return strings.Join(providers, ",")
+}
+
 // errDuplicateReturnParam is the sentinel returned when a caller passes a
-// callback URL that already has a `return` query string AND a non-nil
+// callback URL that already has a `return` query string AND a non-empty
 // ReturnMetadata option — conflicting intent.
-var errDuplicateReturnParam = errors.New("audd: callback URL already contains a `return` query parameter; pass ReturnMetadata=nil or remove the parameter from the URL")
+var errDuplicateReturnParam = errors.New("audd: callback URL already contains a `return` query parameter; clear ReturnMetadata or remove the parameter from the URL")
 
 // addReturnToURL appends `?return=<csv>` to a callback URL.
 //
 //   - If `returnMetadata` is empty, returns the URL unchanged.
 //   - If the URL already has a `return` query param, returns the typed
 //     duplicate-parameter error rather than silently overwriting.
-func addReturnToURL(rawURL string, returnMetadata []string) (string, error) {
-	if len(returnMetadata) == 0 {
+func addReturnToURL(rawURL string, returnMetadata string) (string, error) {
+	if returnMetadata == "" {
 		return rawURL, nil
 	}
 	parsed, err := url.Parse(rawURL)
@@ -137,7 +145,7 @@ func addReturnToURL(rawURL string, returnMetadata []string) (string, error) {
 	if q.Has("return") {
 		return "", &AudDAPIError{ErrorCode: 0, Message: errDuplicateReturnParam.Error()}
 	}
-	q.Set("return", strings.Join(returnMetadata, ","))
+	q.Set("return", returnMetadata)
 	parsed.RawQuery = q.Encode()
 	return parsed.String(), nil
 }

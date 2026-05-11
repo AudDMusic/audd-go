@@ -41,9 +41,10 @@ func newStreamsClient(c *Client) *StreamsClient {
 // SetCallbackUrlOptions controls SetCallbackUrl.
 type SetCallbackUrlOptions struct {
 	// ReturnMetadata, if non-empty, is added as a `?return=<csv>` query
-	// parameter on the callback URL. If the URL already has a `return`
-	// param, the call returns an error rather than silently overwriting.
-	ReturnMetadata []string
+	// parameter on the callback URL (e.g. "apple_music,spotify"). If the
+	// URL already has a `return` param, the call returns an error rather
+	// than silently overwriting.
+	ReturnMetadata string
 }
 
 // SetCallbackUrl is the no-context convenience wrapper around
@@ -64,9 +65,9 @@ func (s *StreamsClient) SetCallbackUrlContext(ctx context.Context, urlStr string
 	return err
 }
 
-func optsReturnMetadata(opts *SetCallbackUrlOptions) []string {
+func optsReturnMetadata(opts *SetCallbackUrlOptions) string {
 	if opts == nil {
-		return nil
+		return ""
 	}
 	return opts.ReturnMetadata
 }

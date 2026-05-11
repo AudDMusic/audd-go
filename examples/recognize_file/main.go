@@ -19,7 +19,7 @@ func main() {
 	defer func() { _ = client.Close() }()
 
 	result, err := client.Recognize(os.Args[1], &audd.RecognizeOptions{
-		Return: []string{"apple_music", "spotify"},
+		Return: "apple_music,spotify",
 	})
 	if err != nil {
 		log.Fatal(err)
