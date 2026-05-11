@@ -1,0 +1,36 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+      - "audd-go/v*"
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.23"
+      - name: Verify tag matches version.go
+        run: |
+          tag="${GITHUB_REF##*/v}"
+          version=$(grep -o 'Version = "[^"]*"' version.go | cut -d'"' -f2)
+          if [ "$tag" != "$version" ]; then
+            echo "tag ($tag) does not match version.go ($version)"
+            exit 1
+          fi
+      - name: Run full test suite
+        run: go test -count=1 ./...
+      - name: Notify pkg.go.dev
+        # pkg.go.dev auto-discovers via the proxy; this curl primes it.
+        run: |
+          version="${GITHUB_REF##*/}"
+          curl -fsS "https://proxy.golang.org/github.com/!aud!d!music/audd-go/@v/${version}.info" || true
