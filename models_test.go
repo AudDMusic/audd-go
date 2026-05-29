@@ -77,6 +77,51 @@ func TestEnterpriseMatch_ParsesISRCAndUPC(t *testing.T) {
 	assert.Equal(t, "00000000", m.UPC)
 }
 
+// TestEnterpriseMatch_OmittedScoreISRCUPC verifies the CEO rule: a successful
+// enterprise response whose song omits score/isrc/upc/label decodes without
+// error, leaving those fields at their zero values while the present fields
+// populate normally. The enterprise endpoint legitimately returns matches
+// with no score and no isrc/upc/label.
+func TestEnterpriseMatch_OmittedScoreISRCUPC(t *testing.T) {
+	// Full enterprise-shaped result: array of chunks, each with a songs array.
+	// The song deliberately omits score, isrc, upc, and label.
+	body := []byte(`[{"offset":"0","songs":[{"timecode":"00:00","artist":"X","title":"Y","song_link":"https://lis.tn/abc"}]}]`)
+
+	var chunks []EnterpriseChunkResult
+	require.NoError(t, json.Unmarshal(body, &chunks))
+	require.Len(t, chunks, 1)
+	require.Len(t, chunks[0].Songs, 1)
+
+	m := chunks[0].Songs[0]
+	assert.Equal(t, "X", m.Artist)
+	assert.Equal(t, "Y", m.Title)
+	assert.Equal(t, "https://lis.tn/abc", m.SongLink)
+	// Absent fields are zero values, not errors.
+	assert.Equal(t, 0, m.Score)
+	assert.Equal(t, "", m.ISRC)
+	assert.Equal(t, "", m.UPC)
+	assert.Equal(t, "", m.Label)
+}
+
+// TestParseCallback_EmptyResults verifies a recognition callback whose
+// `results` array is absent or empty parses without error: Song stays its
+// zero value and Alternatives is empty.
+func TestParseCallback_EmptyResults(t *testing.T) {
+	cases := [][]byte{
+		[]byte(`{"status":"success","result":{"radio_id":7,"timestamp":"x","results":[]}}`),
+		[]byte(`{"status":"success","result":{"radio_id":7,"timestamp":"x"}}`),
+	}
+	for _, body := range cases {
+		match, notif, err := ParseCallback(body)
+		require.NoError(t, err)
+		require.Nil(t, notif)
+		require.NotNil(t, match)
+		assert.Equal(t, int64(7), match.RadioID)
+		assert.Equal(t, StreamCallbackSong{}, match.Song)
+		assert.Empty(t, match.Alternatives)
+	}
+}
+
 func TestStream_ParsesAndCapturesExtras(t *testing.T) {
 	data := []byte(`{
 		"radio_id": 7, "url": "twitch:foo", "stream_running": true,

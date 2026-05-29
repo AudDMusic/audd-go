@@ -97,19 +97,24 @@ func parseMatch(resultRaw json.RawMessage, fullBody []byte) (*StreamCallbackMatc
 	if err := json.Unmarshal(resultRaw, &rm); err != nil {
 		return nil, &AudDSerializationError{Message: "callback result: " + err.Error(), RawText: string(fullBody)}
 	}
-	if len(rm.Results) == 0 {
-		return nil, &AudDSerializationError{Message: "callback result.results is empty", RawText: string(fullBody)}
-	}
 	extras, err := extractExtras(resultRaw, streamCallbackMatchKnownKeys)
 	if err != nil {
 		return nil, err
+	}
+	// A successful callback never fails to parse just because `results` is
+	// absent or empty: Song stays its zero value and Alternatives is empty.
+	var song StreamCallbackSong
+	var alternatives []StreamCallbackSong
+	if len(rm.Results) > 0 {
+		song = rm.Results[0]
+		alternatives = rm.Results[1:]
 	}
 	return &StreamCallbackMatch{
 		RadioID:      rm.RadioID,
 		Timestamp:    rm.Timestamp,
 		PlayLength:   rm.PlayLength,
-		Song:         rm.Results[0],
-		Alternatives: rm.Results[1:],
+		Song:         song,
+		Alternatives: alternatives,
 		Extras:       extras,
 		RawResponse:  append([]byte{}, fullBody...),
 	}, nil
