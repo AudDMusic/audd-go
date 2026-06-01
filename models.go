@@ -341,6 +341,13 @@ type EnterpriseMatch struct {
 	StartOffset int    `json:"start_offset,omitempty"`
 	EndOffset   int    `json:"end_offset,omitempty"`
 
+	// StartSeconds and EndSeconds locate the match within the uploaded file,
+	// in seconds: the chunk's offset in the file plus the fragment-relative
+	// StartOffset/EndOffset. nil when the chunk carried no usable offset.
+	// Computed by the SDK during flatten, not present on the wire.
+	StartSeconds *float64 `json:"-"`
+	EndSeconds   *float64 `json:"-"`
+
 	Extras      map[string]json.RawMessage `json:"-"`
 	RawResponse json.RawMessage            `json:"-"`
 }

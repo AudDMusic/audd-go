@@ -55,9 +55,18 @@ result, err := client.Recognize("/path/to/clip.mp3", nil)
 `io.Reader`. For longer audio files, use
 `client.RecognizeEnterprise(source, &audd.EnterpriseOptions{Limit: ptr(1)})`,
 which returns `[]EnterpriseMatch` across the file's chunks. Each match
-carries the same core tags plus `Score`, `StartOffset`, `EndOffset`,
-`ISRC`, `UPC`. Access to `ISRC`, `UPC`, and `Score` requires a Startup
-plan or higher — [contact us](mailto:api@audd.io) for enterprise features.
+carries the same core tags plus `Score`, `StartSeconds`, `EndSeconds`,
+`StartOffset`, `EndOffset`, `ISRC`, `UPC`. Access to `ISRC`, `UPC`, and
+`Score` requires a Startup plan or higher — [contact us](mailto:api@audd.io)
+for enterprise features.
+
+`StartSeconds` and `EndSeconds` (`*float64`) tell you where the song plays
+in your file, in seconds — the match's position measured from the start of
+the upload. They are precise because the SDK requests accurate offsets by
+default; set `AccurateOffsets` to a non-nil `false` to opt out. `StartOffset`
+and `EndOffset` sit behind them as the raw fragment-relative milliseconds.
+`StartSeconds`/`EndSeconds` are `nil` when a chunk arrives without a usable
+offset.
 
 Every method has an explicit-context twin: `RecognizeContext(ctx, source, opts)`,
 `Streams().AddContext(ctx, req)`, `Advanced().FindLyricsContext(ctx, query)`,

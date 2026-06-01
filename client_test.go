@@ -182,6 +182,55 @@ func TestRecognizeEnterprise_FlattensChunks(t *testing.T) {
 	assert.Equal(t, "T2", matches[1].Title)
 }
 
+func TestRecognizeEnterprise_AnchorsOffsetsToFile(t *testing.T) {
+	c, _ := newMockClient(t, func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(`{"status":"success","result":[
+			{"offset":"00:01:00","songs":[{"score":100,"timecode":"01:04","artist":"A","title":"T1","start_offset":4200,"end_offset":11800}]},
+			{"songs":[{"score":99,"timecode":"00:05","artist":"B","title":"T2","start_offset":1000,"end_offset":2000}]}
+		]}`))
+	})
+	defer func() { _ = c.Close() }()
+
+	matches, err := c.RecognizeEnterpriseContext(context.Background(), "https://example.com/big.mp3", nil)
+	require.NoError(t, err)
+	require.Len(t, matches, 2)
+
+	// Chunk "00:01:00" = 60s base; start_offset 4200ms -> 64.2s, end 11800ms -> 71.8s.
+	require.NotNil(t, matches[0].StartSeconds)
+	require.NotNil(t, matches[0].EndSeconds)
+	assert.InDelta(t, 64.2, *matches[0].StartSeconds, 1e-9)
+	assert.InDelta(t, 71.8, *matches[0].EndSeconds, 1e-9)
+
+	// Second chunk has no offset -> StartSeconds/EndSeconds stay nil.
+	assert.Nil(t, matches[1].StartSeconds)
+	assert.Nil(t, matches[1].EndSeconds)
+}
+
+func TestRecognizeEnterprise_AccurateOffsetsDefaultOn(t *testing.T) {
+	var seenAccurate string
+	c, _ := newMockClient(t, func(w http.ResponseWriter, r *http.Request) {
+		require.NoError(t, r.ParseMultipartForm(1<<20))
+		seenAccurate = r.FormValue("accurate_offsets")
+		_, _ = w.Write([]byte(`{"status":"success","result":[]}`))
+	})
+	defer func() { _ = c.Close() }()
+
+	// Nil options and a zero-value options struct must both request accurate offsets.
+	_, err := c.RecognizeEnterpriseContext(context.Background(), "https://example.com/big.mp3", nil)
+	require.NoError(t, err)
+	assert.Equal(t, "true", seenAccurate, "nil opts must send accurate_offsets=true")
+
+	_, err = c.RecognizeEnterpriseContext(context.Background(), "https://example.com/big.mp3", &EnterpriseOptions{})
+	require.NoError(t, err)
+	assert.Equal(t, "true", seenAccurate, "zero-value opts must send accurate_offsets=true")
+
+	// Explicit non-nil false opts out.
+	off := false
+	_, err = c.RecognizeEnterpriseContext(context.Background(), "https://example.com/big.mp3", &EnterpriseOptions{AccurateOffsets: &off})
+	require.NoError(t, err)
+	assert.Equal(t, "false", seenAccurate, "non-nil false must send accurate_offsets=false")
+}
+
 func TestRecognizeEnterprise_LimitOptionPropagated(t *testing.T) {
 	var seenLimit string
 	c, _ := newMockClient(t, func(w http.ResponseWriter, r *http.Request) {

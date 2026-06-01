@@ -276,8 +276,11 @@ type EnterpriseOptions struct {
 	Limit            *int
 	SkipFirstSeconds *int
 	UseTimecode      *bool
-	AccurateOffsets  *bool
-	Timeout          time.Duration
+	// AccurateOffsets requests precise within-fragment offsets. It is on by
+	// default: leave it nil and the request sends accurate_offsets=true. Set
+	// it to a non-nil false to opt out.
+	AccurateOffsets *bool
+	Timeout         time.Duration
 	// ExtraParameters lets you pass additional form fields the typed
 	// options don't cover. Typed fields take precedence on collision.
 	ExtraParameters map[string]string
@@ -413,18 +416,32 @@ func (c *Client) RecognizeEnterpriseContext(ctx context.Context, source Source, 
 	}
 	out := []EnterpriseMatch{}
 	for _, ch := range chunks {
+		base, ok := parseOffsetToSeconds(ch.Offset)
+		if ok {
+			for i := range ch.Songs {
+				start := base + float64(ch.Songs[i].StartOffset)/1000
+				end := base + float64(ch.Songs[i].EndOffset)/1000
+				ch.Songs[i].StartSeconds = &start
+				ch.Songs[i].EndSeconds = &end
+			}
+		}
 		out = append(out, ch.Songs...)
 	}
 	return out, nil
 }
 
 // applyEnterpriseOpts mutates fields with the enterprise options.
+//
+// Accurate offsets default on: the wire carries accurate_offsets=true unless
+// the caller explicitly set AccurateOffsets to a non-nil false. A zero-value
+// options struct (or nil opts) therefore requests accurate offsets.
 func (c *Client) applyEnterpriseOpts(fields *formFields, opts *EnterpriseOptions) {
-	if opts == nil {
-		return
-	}
 	if fields.Data == nil {
 		fields.Data = map[string]string{}
+	}
+	if opts == nil {
+		fields.Data["accurate_offsets"] = "true"
+		return
 	}
 	// ExtraParameters first; typed fields then override on collision.
 	for k, v := range opts.ExtraParameters {
@@ -448,8 +465,11 @@ func (c *Client) applyEnterpriseOpts(fields *formFields, opts *EnterpriseOptions
 	if opts.UseTimecode != nil {
 		fields.Data["use_timecode"] = boolStr(*opts.UseTimecode)
 	}
+	// Default accurate offsets on; only a non-nil explicit false disables.
 	if opts.AccurateOffsets != nil {
 		fields.Data["accurate_offsets"] = boolStr(*opts.AccurateOffsets)
+	} else {
+		fields.Data["accurate_offsets"] = "true"
 	}
 }
 
