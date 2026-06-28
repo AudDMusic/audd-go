@@ -1,5 +1,6 @@
 # audd-go
 
+[![Powered by AudD](https://img.shields.io/badge/Music_Recognition-AudD_API-2a4eef)](https://audd.io)
 [![CI](https://github.com/AudDMusic/audd-go/actions/workflows/ci.yml/badge.svg)](https://github.com/AudDMusic/audd-go/actions/workflows/ci.yml)
 [![Contract](https://github.com/AudDMusic/audd-go/actions/workflows/contract.yml/badge.svg)](https://github.com/AudDMusic/audd-go/actions/workflows/contract.yml)
 [![Go Reference](https://pkg.go.dev/badge/github.com/AudDMusic/audd-go.svg)](https://pkg.go.dev/github.com/AudDMusic/audd-go)
