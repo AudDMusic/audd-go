@@ -20,17 +20,30 @@ import (
 
 // --- Lenient parsing: wrong-typed response fields degrade to zero values ---
 
-func TestLenient_Recognition_WrongTypedFields(t *testing.T) {
+func TestLenient_Recognition_CoercesConvertibleFields(t *testing.T) {
 	// Numeric timecode, string audio_id, numeric artist: none may fail the
-	// decode; each degrades to its zero value while good fields populate.
+	// decode; convertible values coerce to the field's type.
 	data := []byte(`{"timecode": 56, "audio_id": "146", "artist": 42, "title": "Y", "album": "Z"}`)
 	var r Recognition
 	require.NoError(t, json.Unmarshal(data, &r))
-	assert.Equal(t, "", r.Timecode)
-	assert.Nil(t, r.AudioID)
-	assert.Equal(t, "", r.Artist)
+	assert.Equal(t, "56", r.Timecode, "numeric timecode renders to string")
+	require.NotNil(t, r.AudioID, "numeric-string audio_id parses")
+	assert.Equal(t, 146, *r.AudioID)
+	assert.Equal(t, "42", r.Artist, "numeric artist renders to string")
 	assert.Equal(t, "Y", r.Title)
 	assert.Equal(t, "Z", r.Album)
+}
+
+func TestLenient_Recognition_UnconvertibleFieldsDegrade(t *testing.T) {
+	// Garbage that can't be coerced degrades to the zero value — never an
+	// error, never a misleading zero from a partial parse.
+	data := []byte(`{"audio_id": "abc", "timecode": {"x": 1}, "artist": ["A"], "title": "Y"}`)
+	var r Recognition
+	require.NoError(t, json.Unmarshal(data, &r))
+	assert.Nil(t, r.AudioID, "non-numeric string does not coerce to int")
+	assert.Equal(t, "", r.Timecode, "object does not coerce to string")
+	assert.Equal(t, "", r.Artist, "array does not coerce to string")
+	assert.Equal(t, "Y", r.Title)
 }
 
 func TestLenient_Recognition_WrongTypedMetadataBlock(t *testing.T) {
@@ -48,7 +61,7 @@ func TestLenient_Recognition_WrongTypedNestedMetadataField(t *testing.T) {
 	require.NoError(t, json.Unmarshal(data, &r))
 	require.NotNil(t, r.AppleMusic)
 	assert.Equal(t, "X", r.AppleMusic.ArtistName)
-	assert.Equal(t, 0, r.AppleMusic.DurationInMillis, "wrong-typed nested field degrades to zero")
+	assert.Equal(t, 180000, r.AppleMusic.DurationInMillis, "numeric-string nested field coerces")
 }
 
 func TestLenient_RecognizeCall_WrongTypedFieldDoesNotFail(t *testing.T) {
@@ -61,7 +74,7 @@ func TestLenient_RecognizeCall_WrongTypedFieldDoesNotFail(t *testing.T) {
 	require.NoError(t, err, "wrong-typed timecode must not fail the call")
 	require.NotNil(t, res)
 	assert.Equal(t, "X", res.Artist)
-	assert.Equal(t, "", res.Timecode)
+	assert.Equal(t, "56", res.Timecode)
 }
 
 func TestLenient_EnterpriseMatch_StringScore(t *testing.T) {
@@ -75,18 +88,60 @@ func TestLenient_EnterpriseMatch_StringScore(t *testing.T) {
 	matches, err := c.RecognizeEnterpriseContext(context.Background(), "https://example.com/big.mp3", nil)
 	require.NoError(t, err, "string score / numeric timecode must not fail the call")
 	require.Len(t, matches, 1)
-	assert.Equal(t, 0, matches[0].Score)
-	assert.Equal(t, "", matches[0].Timecode)
+	assert.Equal(t, 85, matches[0].Score, `{"score":"85"} coerces to 85`)
+	assert.Equal(t, "7", matches[0].Timecode)
 	assert.Equal(t, "A", matches[0].Artist)
 }
 
-func TestLenient_Stream_WrongTypedFields(t *testing.T) {
+func TestLenient_ScalarCoercionMatrix(t *testing.T) {
+	cases := []struct {
+		name string
+		body string
+		want EnterpriseMatch
+	}{
+		{"float score truncates", `{"score": 85.9}`, EnterpriseMatch{Score: 85}},
+		{"float-string score truncates", `{"score": "8.5"}`, EnterpriseMatch{Score: 8}},
+		{"bool score maps to 1", `{"score": true}`, EnterpriseMatch{Score: 1}},
+		{"whitespace numeric string parses", `{"score": " 85 "}`, EnterpriseMatch{Score: 85}},
+		{"partial numeric string degrades", `{"score": "85abc"}`, EnterpriseMatch{Score: 0}},
+		{"NaN string degrades", `{"score": "NaN"}`, EnterpriseMatch{Score: 0}},
+		{"Infinity string degrades", `{"score": "Infinity"}`, EnterpriseMatch{Score: 0}},
+		{"bool artist renders", `{"artist": true}`, EnterpriseMatch{Artist: "true"}},
+	}
+	for _, tc := range cases {
+		var m EnterpriseMatch
+		require.NoError(t, json.Unmarshal([]byte(tc.body), &m), tc.name)
+		assert.Equal(t, tc.want.Score, m.Score, tc.name)
+		assert.Equal(t, tc.want.Artist, m.Artist, tc.name)
+	}
+}
+
+func TestLenient_Stream_CoercesWrongTypedFields(t *testing.T) {
 	data := []byte(`{"radio_id": "9", "url": "twitch:foo", "stream_running": "true"}`)
 	var s Stream
 	require.NoError(t, json.Unmarshal(data, &s))
-	assert.Equal(t, 0, s.RadioID)
-	assert.False(t, s.StreamRunning)
+	assert.Equal(t, 9, s.RadioID, "numeric-string radio_id parses")
+	assert.True(t, s.StreamRunning, `"true" coerces to true`)
 	assert.Equal(t, "twitch:foo", s.URL)
+}
+
+func TestLenient_BoolCoercionWhitelist(t *testing.T) {
+	for _, tc := range []struct {
+		raw  string
+		want bool
+	}{
+		{`"true"`, true}, {`"1"`, true}, {`"YES"`, true}, {`"on"`, true},
+		{`"false"`, false}, {`"0"`, false}, {`"No"`, false}, {`"off"`, false}, {`""`, false},
+		{`1`, true}, {`0`, false},
+	} {
+		var s Stream
+		require.NoError(t, json.Unmarshal([]byte(`{"stream_running": `+tc.raw+`}`), &s))
+		assert.Equal(t, tc.want, s.StreamRunning, "stream_running=%s", tc.raw)
+	}
+	// Unrecognized strings degrade to the zero value, never guess true.
+	var s Stream
+	require.NoError(t, json.Unmarshal([]byte(`{"stream_running": "maybe"}`), &s))
+	assert.False(t, s.StreamRunning)
 }
 
 func TestLenient_StreamsList_WrongTypedFieldDoesNotFail(t *testing.T) {
@@ -98,11 +153,11 @@ func TestLenient_StreamsList_WrongTypedFieldDoesNotFail(t *testing.T) {
 	streams, err := c.Streams().List()
 	require.NoError(t, err)
 	require.Len(t, streams, 1)
-	assert.Equal(t, 0, streams[0].RadioID)
+	assert.Equal(t, 1, streams[0].RadioID, "numeric-string radio_id coerces")
 	assert.True(t, streams[0].StreamRunning)
 }
 
-func TestLenient_Callback_WrongTypedFields(t *testing.T) {
+func TestLenient_Callback_CoercesWrongTypedFields(t *testing.T) {
 	body := []byte(`{"status":"success","result":{
 		"radio_id": "7", "timestamp": 12345, "play_length": "220",
 		"results": [{"artist": "A", "title": "T", "score": "99"}]
@@ -111,14 +166,14 @@ func TestLenient_Callback_WrongTypedFields(t *testing.T) {
 	require.NoError(t, err, "wrong-typed callback fields must not fail parsing")
 	require.Nil(t, notif)
 	require.NotNil(t, match)
-	assert.Equal(t, int64(0), match.RadioID)
-	assert.Equal(t, "", match.Timestamp)
-	assert.Equal(t, 0, match.PlayLength)
+	assert.Equal(t, int64(7), match.RadioID)
+	assert.Equal(t, "12345", match.Timestamp)
+	assert.Equal(t, 220, match.PlayLength)
 	assert.Equal(t, "A", match.Song.Artist)
-	assert.Equal(t, 0, match.Song.Score)
+	assert.Equal(t, 99, match.Song.Score)
 }
 
-func TestLenient_CallbackNotification_WrongTypedFields(t *testing.T) {
+func TestLenient_CallbackNotification_CoercesWrongTypedFields(t *testing.T) {
 	body := []byte(`{"notification":{
 		"radio_id": 3, "stream_running": "false",
 		"notification_code": "650", "notification_message": "can't connect"
@@ -128,8 +183,9 @@ func TestLenient_CallbackNotification_WrongTypedFields(t *testing.T) {
 	require.Nil(t, match)
 	require.NotNil(t, notif)
 	assert.Equal(t, 3, notif.RadioID)
-	assert.Nil(t, notif.StreamRunning)
-	assert.Equal(t, 0, notif.NotificationCode)
+	require.NotNil(t, notif.StreamRunning, `"false" coerces through the pointer`)
+	assert.False(t, *notif.StreamRunning)
+	assert.Equal(t, 650, notif.NotificationCode)
 	assert.Equal(t, "can't connect", notif.NotificationMessage)
 }
 
@@ -137,7 +193,7 @@ func TestLenient_LyricsResult_WrongTypedSongID(t *testing.T) {
 	data := []byte(`{"artist": "A", "title": "T", "song_id": "abc"}`)
 	var l LyricsResult
 	require.NoError(t, json.Unmarshal(data, &l))
-	assert.Equal(t, 0, l.SongID)
+	assert.Equal(t, 0, l.SongID, "non-numeric string degrades")
 	assert.Equal(t, "A", l.Artist)
 }
 

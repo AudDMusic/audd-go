@@ -5,6 +5,20 @@ All notable changes to this project are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.5.19] - 2026-07-12
+
+### Changed
+
+- Lenient parsing now coerces convertible wrong-typed scalars instead of
+  always zeroing them: a numeric string parses into a number field
+  (`{"score":"85"}` → 85, floats truncate), numbers and bools render into
+  string fields, numbers map into bool fields (`!= 0`), and recognized
+  boolean strings ("true"/"1"/"yes"/"on", "false"/"0"/"no"/"off"/"",
+  case-insensitive) map into bool fields. Unconvertible values (garbage
+  strings, wrong-shaped objects/arrays) still degrade to the zero value —
+  never an error, never a misleading zero from a partial parse. Numeric
+  strings parse strictly: the whole trimmed string must be a finite number.
+
 ## [1.5.18] - 2026-07-12
 
 ### Fixed

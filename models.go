@@ -2,8 +2,10 @@ package audd
 
 import (
 	"encoding/json"
+	"math"
 	"net/url"
 	"reflect"
+	"strconv"
 	"strings"
 )
 
@@ -126,8 +128,10 @@ func extrasFromRaw(raw map[string]json.RawMessage, known map[string]bool) map[st
 }
 
 // lenientUnmarshal decodes a JSON object into dst field by field, best-effort:
-// a field whose wire value has the wrong type is skipped (it keeps its zero
-// value) instead of failing the whole decode. Only an undecodable JSON object
+// a field whose wire value has the wrong type is coerced when the value is
+// convertible (a numeric string into a number field, a number into a string
+// field, ...) and otherwise skipped so it keeps its zero value — the whole
+// decode never fails on a wrong-typed field. Only an undecodable JSON object
 // returns an error.
 //
 // dst must be a pointer to a struct; fields are matched by their `json` tag.
@@ -155,11 +159,119 @@ func lenientUnmarshal(data []byte, dst any) (map[string]json.RawMessage, error) 
 		}
 		target := reflect.New(f.Type)
 		if err := json.Unmarshal(rawVal, target.Interface()); err != nil {
-			continue // wrong-typed field: degrade to the zero value
+			// Wrong-typed field: coerce when convertible, otherwise degrade
+			// to the zero value.
+			coerceScalar(rawVal, fv)
+			continue
 		}
 		fv.Set(target.Elem())
 	}
 	return raw, nil
+}
+
+// coerceScalar converts a mismatched scalar wire value into the field's type
+// when the conversion is unambiguous:
+//
+//   - string field ← number or bool: rendered ("85", "8.5", "true").
+//   - integer field ← float (truncated), strict numeric string, or bool (0/1).
+//   - float field ← strict numeric string.
+//   - bool field ← number (!= 0) or a recognized boolean string
+//     ("true"/"1"/"yes"/"on" and "false"/"0"/"no"/"off"/"", case-insensitive).
+//
+// Anything unconvertible (garbage strings, objects, arrays) leaves the field
+// at its zero value and returns false. Numeric strings parse strictly: the
+// whole trimmed string must be a finite number.
+func coerceScalar(raw json.RawMessage, fv reflect.Value) bool {
+	if fv.Kind() == reflect.Ptr {
+		inner := reflect.New(fv.Type().Elem())
+		if coerceScalar(raw, inner.Elem()) {
+			fv.Set(inner)
+			return true
+		}
+		return false
+	}
+	var src any
+	if err := json.Unmarshal(raw, &src); err != nil {
+		return false
+	}
+	switch fv.Kind() {
+	case reflect.String:
+		switch s := src.(type) {
+		case float64:
+			fv.SetString(strconv.FormatFloat(s, 'f', -1, 64))
+			return true
+		case bool:
+			fv.SetString(strconv.FormatBool(s))
+			return true
+		}
+	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+		switch s := src.(type) {
+		case float64:
+			// A JSON integer decodes directly; only non-integral floats
+			// reach coercion. Truncate.
+			return setIntChecked(fv, int64(s))
+		case string:
+			if f, ok := strictParseFloat(s); ok {
+				return setIntChecked(fv, int64(f))
+			}
+		case bool:
+			var n int64
+			if s {
+				n = 1
+			}
+			return setIntChecked(fv, n)
+		}
+	case reflect.Float32, reflect.Float64:
+		if s, ok := src.(string); ok {
+			if f, parsed := strictParseFloat(s); parsed {
+				fv.SetFloat(f)
+				return true
+			}
+		}
+	case reflect.Bool:
+		switch s := src.(type) {
+		case float64:
+			fv.SetBool(s != 0)
+			return true
+		case string:
+			if b, ok := boolFromString(s); ok {
+				fv.SetBool(b)
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// setIntChecked assigns n unless it overflows the field's integer width.
+func setIntChecked(fv reflect.Value, n int64) bool {
+	if fv.OverflowInt(n) {
+		return false
+	}
+	fv.SetInt(n)
+	return true
+}
+
+// strictParseFloat parses a numeric string: the entire trimmed string must be
+// a finite number ("85", " 8.5 " parse; "85abc", "NaN", "Infinity" do not).
+func strictParseFloat(s string) (float64, bool) {
+	f, err := strconv.ParseFloat(strings.TrimSpace(s), 64)
+	if err != nil || math.IsNaN(f) || math.IsInf(f, 0) {
+		return 0, false
+	}
+	return f, true
+}
+
+// boolFromString maps recognized boolean strings; anything else is not coerced.
+func boolFromString(s string) (value, ok bool) {
+	switch strings.ToLower(strings.TrimSpace(s)) {
+	case "true", "1", "yes", "on":
+		return true, true
+	case "false", "0", "no", "off", "":
+		return false, true
+	default:
+		return false, false
+	}
 }
 
 // UnmarshalJSON populates Extras + RawResponse alongside the typed fields.
