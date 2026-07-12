@@ -87,6 +87,7 @@ func ParseCallback(body []byte) (*StreamCallbackMatch, *StreamCallbackNotificati
 
 // parseMatch decodes a `result` block into StreamCallbackMatch. The block's
 // `results` array becomes Song (first entry) + Alternatives (remaining).
+// Wrong-typed fields degrade to zero values instead of failing the callback.
 func parseMatch(resultRaw json.RawMessage, fullBody []byte) (*StreamCallbackMatch, error) {
 	type rawMatch struct {
 		RadioID    int64                `json:"radio_id"`
@@ -95,13 +96,11 @@ func parseMatch(resultRaw json.RawMessage, fullBody []byte) (*StreamCallbackMatc
 		Results    []StreamCallbackSong `json:"results"`
 	}
 	var rm rawMatch
-	if err := json.Unmarshal(resultRaw, &rm); err != nil {
+	raw, err := lenientUnmarshal(resultRaw, &rm)
+	if err != nil {
 		return nil, &AudDSerializationError{Message: "callback result: " + err.Error(), RawText: string(fullBody)}
 	}
-	extras, err := extractExtras(resultRaw, streamCallbackMatchKnownKeys)
-	if err != nil {
-		return nil, err
-	}
+	extras := extrasFromRaw(raw, streamCallbackMatchKnownKeys)
 	// A successful callback never fails to parse just because `results` is
 	// absent or empty: Song stays its zero value and Alternatives is empty.
 	var song StreamCallbackSong
@@ -184,9 +183,4 @@ func parseOffsetToSeconds(s string) (float64, bool) {
 		total = total*60 + v
 	}
 	return total, true
-}
-
-// errAs is a tiny wrapper around errors.As that keeps the call-site readable.
-func errAs(err error, target **AudDAPIError) bool {
-	return errors.As(err, target)
 }

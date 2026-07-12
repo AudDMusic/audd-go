@@ -83,6 +83,10 @@ func prepareStringSource(s string) (reopenerFn, error) {
 
 // prepareReaderSource handles io.Reader sources, with a one-shot guard that
 // fails clearly if a non-seeker is retried.
+//
+// The reader stays owned by the caller: it is wrapped in a plain io.Reader
+// shell so the transport's close-after-attempt (which releases SDK-opened
+// files) never closes caller-supplied resources.
 func prepareReaderSource(r io.Reader) (reopenerFn, error) {
 	seeker, isSeeker := r.(io.Seeker)
 	var startPos int64
@@ -108,7 +112,13 @@ func prepareReaderSource(r io.Reader) (reopenerFn, error) {
 		}
 		return formFields{File: &fileField{
 			Name: "upload.bin", ContentType: "application/octet-stream",
-			Reader: r,
+			Reader: callerOwnedReader{r},
 		}}, nil
 	}, nil
+}
+
+// callerOwnedReader hides any Close method on a caller-supplied reader so the
+// transport never closes resources it doesn't own.
+type callerOwnedReader struct {
+	io.Reader
 }

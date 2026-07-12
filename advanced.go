@@ -3,6 +3,7 @@ package audd
 import (
 	"context"
 	"encoding/json"
+	"strconv"
 )
 
 // AdvancedClient is the escape-hatch namespace: lyrics search and a
@@ -27,12 +28,24 @@ func (a *AdvancedClient) FindLyrics(query string) ([]LyricsResult, error) {
 // FindLyricsContext searches AudD's lyrics database. Returns an empty slice
 // on no match.
 func (a *AdvancedClient) FindLyricsContext(ctx context.Context, query string) ([]LyricsResult, error) {
-	body, err := a.RawRequestContext(ctx, "findLyrics", map[string]string{"q": query})
+	return a.findLyricsContext(ctx, query, nil)
+}
+
+// findLyricsContext is the shared implementation behind FindLyricsContext and
+// the v0 compat shim (which forwards its legacy options map as extra params).
+func (a *AdvancedClient) findLyricsContext(ctx context.Context, query string, extraParams map[string]string) ([]LyricsResult, error) {
+	params := map[string]string{}
+	for k, v := range extraParams {
+		params[k] = v
+	}
+	params["q"] = query
+	resp, err := a.doRaw(ctx, "findLyrics", params)
 	if err != nil {
 		return nil, err
 	}
-	if body["status"] == "error" {
-		return nil, raiseFromErrorResponse(body, 200, "", false)
+	body, err := a.c.decodeOrRaise(resp)
+	if err != nil {
+		return nil, err
 	}
 	resultRaw, ok := body["result"]
 	if !ok || resultRaw == nil {
@@ -59,22 +72,15 @@ func (a *AdvancedClient) RawRequest(method string, params map[string]string) (ma
 // by a typed method on this SDK. Hits `https://api.audd.io/<method>/` with
 // the given form params and returns the parsed JSON body.
 func (a *AdvancedClient) RawRequestContext(ctx context.Context, method string, params map[string]string) (map[string]any, error) {
-	policy := a.c.retryPolicy(RetryClassRecognition)
-	resp, err := retryDo(ctx, policy, func() (*httpResponse, error) {
-		data := map[string]string{}
-		for k, v := range params {
-			data[k] = v
-		}
-		return a.c.standardHTTP.postForm(ctx, apiBase+"/"+method+"/", formFields{Data: data})
-	})
+	resp, err := a.doRaw(ctx, method, params)
 	if err != nil {
-		return nil, &AudDConnectionError{Cause: err}
+		return nil, err
 	}
 	if resp.JSONBody == nil {
 		if resp.HTTPStatus >= httpClientErrorFloor {
 			return nil, &AudDAPIError{
 				ErrorCode:   0,
-				Message:     "HTTP " + sprintInt(resp.HTTPStatus) + " with non-JSON response body",
+				Message:     "HTTP " + strconv.Itoa(resp.HTTPStatus) + " with non-JSON response body",
 				HTTPStatus:  resp.HTTPStatus,
 				RequestID:   resp.RequestID,
 				RawResponse: string(resp.RawBody),
@@ -85,35 +91,23 @@ func (a *AdvancedClient) RawRequestContext(ctx context.Context, method string, p
 	return resp.JSONBody, nil
 }
 
-// sprintInt is a tiny helper to keep imports tidy.
-func sprintInt(i int) string {
-	return jsonNumberStr(i)
-}
-
-func jsonNumberStr(i int) string {
-	// strconv.Itoa via fmt.Sprint to avoid an import flutter on small files.
-	return itoa(i)
-}
-
-func itoa(i int) string {
-	// Inline to avoid pulling strconv in for one call.
-	if i == 0 {
-		return "0"
+// doRaw performs the POST for a raw method name with retries and lifecycle
+// events; the caller decides how to decode the response.
+func (a *AdvancedClient) doRaw(ctx context.Context, method string, params map[string]string) (*httpResponse, error) {
+	policy := a.c.retryPolicy(RetryClassRecognition)
+	endpoint := apiBase + "/" + method + "/"
+	obs := a.c.observeCall(method, endpoint)
+	resp, err := retryDo(ctx, policy, func() (*httpResponse, error) {
+		data := map[string]string{}
+		for k, v := range params {
+			data[k] = v
+		}
+		return a.c.standardHTTP.postForm(ctx, endpoint, formFields{Data: data})
+	})
+	if err != nil {
+		obs.fail()
+		return nil, &AudDConnectionError{Cause: err}
 	}
-	neg := i < 0
-	if neg {
-		i = -i
-	}
-	var b [20]byte
-	pos := len(b)
-	for i > 0 {
-		pos--
-		b[pos] = byte('0' + i%10)
-		i /= 10
-	}
-	if neg {
-		pos--
-		b[pos] = '-'
-	}
-	return string(b[pos:])
+	obs.done(resp)
+	return resp, nil
 }

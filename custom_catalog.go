@@ -52,6 +52,8 @@ func (cc *CustomCatalogClient) AddContext(ctx context.Context, audioID int, sour
 	// the client's MaxAttempts override; transient failures surface to the
 	// caller as a clean error.
 	policy := RetryPolicy{Class: RetryClassMutating, MaxAttempts: 1, BackoffFactor: time.Millisecond}
+	endpoint := apiBase + pathUpload
+	obs := cc.c.observeCall("upload", endpoint)
 	resp, err := retryDo(ctx, policy, func() (*httpResponse, error) {
 		fields, fErr := reopen()
 		if fErr != nil {
@@ -61,11 +63,13 @@ func (cc *CustomCatalogClient) AddContext(ctx context.Context, audioID int, sour
 			fields.Data = map[string]string{}
 		}
 		fields.Data["audio_id"] = fmt.Sprint(audioID)
-		return cc.c.standardHTTP.postForm(ctx, apiBase+pathUpload, fields)
+		return cc.c.standardHTTP.postForm(ctx, endpoint, fields)
 	})
 	if err != nil {
+		obs.fail()
 		return &AudDConnectionError{Cause: err}
 	}
+	obs.done(resp)
 	if resp.JSONBody == nil {
 		if resp.HTTPStatus >= httpClientErrorFloor {
 			return &AudDAPIError{

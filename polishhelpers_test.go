@@ -14,6 +14,7 @@ func mkPolishClient(token, baseURL string) *Client {
 	c := NewClient(token, WithMaxAttempts(1))
 	c.standardHTTP = newHTTPClient(token, 0, &http.Client{Transport: rewriteTransport{base: baseURL}})
 	c.enterpriseHTTP = newHTTPClient(token, 0, &http.Client{Transport: rewriteTransport{base: baseURL}})
+	c.longpollHTTP = newHTTPClient(token, 0, &http.Client{Transport: rewriteTransport{base: baseURL}})
 	return c
 }
 
@@ -21,6 +22,7 @@ func mkPolishClientWithEvent(token, baseURL string, hook OnEventHook) *Client {
 	c := NewClient(token, WithMaxAttempts(1), WithOnEvent(hook))
 	c.standardHTTP = newHTTPClient(token, 0, &http.Client{Transport: rewriteTransport{base: baseURL}})
 	c.enterpriseHTTP = newHTTPClient(token, 0, &http.Client{Transport: rewriteTransport{base: baseURL}})
+	c.longpollHTTP = newHTTPClient(token, 0, &http.Client{Transport: rewriteTransport{base: baseURL}})
 	return c
 }
 

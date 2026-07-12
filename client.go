@@ -113,6 +113,10 @@ type Client struct {
 
 	standardHTTP   *httpClient
 	enterpriseHTTP *httpClient
+	// longpollHTTP has no client-level timeout; each longpoll request gets a
+	// per-request deadline sized to the poll timeout plus a margin, so poll
+	// timeouts above the standard 60s work.
+	longpollHTTP *httpClient
 
 	streams        *StreamsClient
 	customCatalog  *CustomCatalogClient
@@ -146,6 +150,11 @@ func NewClient(token string, opts ...Option) *Client {
 	}
 	c.standardHTTP = newHTTPClient(token, c.standardTimeout, c.userHTTPClient)
 	c.enterpriseHTTP = newHTTPClient(token, c.enterpriseTimeout, c.userHTTPClient)
+	c.longpollHTTP = newHTTPClient(token, 0, c.userHTTPClient)
+	// Sub-clients are initialized eagerly so concurrent first accesses are safe.
+	c.streams = newStreamsClient(c)
+	c.customCatalog = newCustomCatalogClient(c)
+	c.advancedClient = newAdvancedClient(c)
 	return c
 }
 
@@ -186,6 +195,7 @@ func (c *Client) SetAPIToken(newToken string) error {
 	c.apiToken = newToken
 	c.standardHTTP.setAPIToken(newToken)
 	c.enterpriseHTTP.setAPIToken(newToken)
+	c.longpollHTTP.setAPIToken(newToken)
 	return nil
 }
 
@@ -201,6 +211,47 @@ func (c *Client) emitEvent(e AudDEvent) {
 	c.onEvent(e)
 }
 
+// callObserver ties the request/response/exception lifecycle events of one
+// API call together. Create with observeCall; finish with done or fail.
+type callObserver struct {
+	c           *Client
+	method, url string
+	start       time.Time
+}
+
+// observeCall emits the "request" event and returns an observer for the
+// matching completion event.
+func (c *Client) observeCall(method, url string) *callObserver {
+	c.emitEvent(AudDEvent{Kind: "request", Method: method, URL: url})
+	return &callObserver{c: c, method: method, url: url, start: time.Now()}
+}
+
+// fail emits the "exception" completion event.
+func (o *callObserver) fail() {
+	o.c.emitEvent(AudDEvent{
+		Kind: "exception", Method: o.method, URL: o.url,
+		Elapsed: time.Since(o.start),
+	})
+}
+
+// done emits the "response" completion event.
+func (o *callObserver) done(resp *httpResponse) {
+	o.c.emitEvent(AudDEvent{
+		Kind: "response", Method: o.method, URL: o.url,
+		RequestID: resp.RequestID, HTTPStatus: resp.HTTPStatus,
+		Elapsed: time.Since(o.start),
+	})
+}
+
+// applyCallTimeout applies a per-call deadline when timeout > 0. The returned
+// cancel func must always be called.
+func applyCallTimeout(ctx context.Context, timeout time.Duration) (context.Context, context.CancelFunc) {
+	if timeout > 0 {
+		return context.WithTimeout(ctx, timeout)
+	}
+	return ctx, func() {}
+}
+
 // Close releases connections owned by the client. Safe to call multiple times.
 // Implements io.Closer.
 func (c *Client) Close() error {
@@ -209,6 +260,9 @@ func (c *Client) Close() error {
 	}
 	if c.enterpriseHTTP != nil {
 		_ = c.enterpriseHTTP.Close()
+	}
+	if c.longpollHTTP != nil {
+		_ = c.longpollHTTP.Close()
 	}
 	return nil
 }
@@ -222,28 +276,19 @@ func (c *Client) retryPolicy(class RetryClass) RetryPolicy {
 	}
 }
 
-// Streams returns the streams sub-client. Lazy-initialized on first access.
+// Streams returns the streams sub-client.
 func (c *Client) Streams() *StreamsClient {
-	if c.streams == nil {
-		c.streams = newStreamsClient(c)
-	}
 	return c.streams
 }
 
-// CustomCatalog returns the custom-catalog sub-client. Lazy-initialized.
+// CustomCatalog returns the custom-catalog sub-client.
 func (c *Client) CustomCatalog() *CustomCatalogClient {
-	if c.customCatalog == nil {
-		c.customCatalog = newCustomCatalogClient(c)
-	}
 	return c.customCatalog
 }
 
 // Advanced returns the advanced sub-client (lyrics + escape-hatch raw_request).
 // Uses the RECOGNITION retry policy because find_lyrics is metered.
 func (c *Client) Advanced() *AdvancedClient {
-	if c.advancedClient == nil {
-		c.advancedClient = newAdvancedClient(c)
-	}
 	return c.advancedClient
 }
 
@@ -255,7 +300,9 @@ type RecognizeOptions struct {
 	ReturnMetadata string
 	// Market is the ISO country code (server default: "us").
 	Market string
-	// Timeout overrides the per-request HTTP timeout for this call only.
+	// Timeout bounds this call: the request is cancelled once the duration
+	// elapses. A client-wide timeout (WithStandardTimeout) still applies if
+	// it is shorter. Zero means no per-call bound.
 	Timeout time.Duration
 	// ExtraParameters lets you pass additional form fields the typed
 	// options don't cover — undocumented parameters, beta features, or
@@ -270,7 +317,7 @@ type EnterpriseOptions struct {
 	// ReturnMetadata is the comma-separated list of metadata sources to include
 	// (e.g. "apple_music,spotify"). Valid values: "apple_music", "spotify",
 	// "deezer", "napster", "musicbrainz".
-	ReturnMetadata           string
+	ReturnMetadata   string
 	Skip             *int
 	Every            *int
 	Limit            *int
@@ -280,7 +327,10 @@ type EnterpriseOptions struct {
 	// default: leave it nil and the request sends accurate_offsets=true. Set
 	// it to a non-nil false to opt out.
 	AccurateOffsets *bool
-	Timeout         time.Duration
+	// Timeout bounds this call: the request is cancelled once the duration
+	// elapses. A client-wide timeout (WithEnterpriseTimeout) still applies
+	// if it is shorter. Zero means no per-call bound.
+	Timeout time.Duration
 	// ExtraParameters lets you pass additional form fields the typed
 	// options don't cover. Typed fields take precedence on collision.
 	ExtraParameters map[string]string
@@ -307,10 +357,14 @@ func (c *Client) RecognizeContext(ctx context.Context, source Source, opts *Reco
 	if err != nil {
 		return nil, err
 	}
+	if opts != nil {
+		var cancel context.CancelFunc
+		ctx, cancel = applyCallTimeout(ctx, opts.Timeout)
+		defer cancel()
+	}
 	policy := c.retryPolicy(RetryClassRecognition)
 	endpoint := apiBase + "/"
-	startedAt := time.Now()
-	c.emitEvent(AudDEvent{Kind: "request", Method: "recognize", URL: endpoint})
+	obs := c.observeCall("recognize", endpoint)
 
 	resp, err := retryDo(ctx, policy, func() (*httpResponse, error) {
 		fields, err := reopen()
@@ -321,14 +375,10 @@ func (c *Client) RecognizeContext(ctx context.Context, source Source, opts *Reco
 		return c.standardHTTP.postForm(ctx, endpoint, fields)
 	})
 	if err != nil {
-		c.emitEvent(AudDEvent{Kind: "exception", Method: "recognize", URL: endpoint, Elapsed: time.Since(startedAt)})
+		obs.fail()
 		return nil, &AudDConnectionError{Cause: err}
 	}
-	c.emitEvent(AudDEvent{
-		Kind: "response", Method: "recognize", URL: endpoint,
-		RequestID: resp.RequestID, HTTPStatus: resp.HTTPStatus,
-		Elapsed: time.Since(startedAt),
-	})
+	obs.done(resp)
 	body, err := c.decodeOrRaise(resp)
 	if err != nil {
 		return nil, err
@@ -385,7 +435,14 @@ func (c *Client) RecognizeEnterpriseContext(ctx context.Context, source Source, 
 	if err != nil {
 		return nil, err
 	}
+	if opts != nil {
+		var cancel context.CancelFunc
+		ctx, cancel = applyCallTimeout(ctx, opts.Timeout)
+		defer cancel()
+	}
 	policy := c.retryPolicy(RetryClassRecognition)
+	endpoint := enterpriseBase + "/"
+	obs := c.observeCall("recognizeEnterprise", endpoint)
 
 	resp, err := retryDo(ctx, policy, func() (*httpResponse, error) {
 		fields, err := reopen()
@@ -393,11 +450,13 @@ func (c *Client) RecognizeEnterpriseContext(ctx context.Context, source Source, 
 			return nil, err
 		}
 		c.applyEnterpriseOpts(&fields, opts)
-		return c.enterpriseHTTP.postForm(ctx, enterpriseBase+"/", fields)
+		return c.enterpriseHTTP.postForm(ctx, endpoint, fields)
 	})
 	if err != nil {
+		obs.fail()
 		return nil, &AudDConnectionError{Cause: err}
 	}
+	obs.done(resp)
 	body, err := c.decodeOrRaise(resp)
 	if err != nil {
 		return nil, err

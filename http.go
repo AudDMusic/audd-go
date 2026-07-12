@@ -90,6 +90,15 @@ func newHTTPClient(apiToken string, timeout time.Duration, hc *http.Client) *htt
 // upload — AudD's audio uploads are bounded and we need a deterministic
 // Content-Length).
 func (h *httpClient) postForm(ctx context.Context, target string, fields formFields) (*httpResponse, error) {
+	// The file reader is consumed by this attempt; when it owns a resource
+	// (io.Closer — e.g. a file the SDK opened from a path source), release it
+	// once the attempt finishes. Caller-supplied readers are wrapped so their
+	// resources are never closed on the caller's behalf (see prepareReaderSource).
+	if fields.File != nil {
+		if closer, ok := fields.File.Reader.(io.Closer); ok {
+			defer func() { _ = closer.Close() }()
+		}
+	}
 	var buf bytes.Buffer
 	mw := multipart.NewWriter(&buf)
 	if err := mw.WriteField("api_token", h.currentAPIToken()); err != nil {

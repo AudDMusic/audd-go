@@ -3,6 +3,8 @@ package audd
 import (
 	"encoding/json"
 	"net/url"
+	"reflect"
+	"strings"
 )
 
 // Forward compatibility: every typed model captures unknown JSON fields into
@@ -112,32 +114,62 @@ var recognitionKnownKeys = map[string]bool{
 	"musicbrainz": true,
 }
 
-// extractExtras returns the raw map of unknown keys not in `known`.
-func extractExtras(data []byte, known map[string]bool) (map[string]json.RawMessage, error) {
-	var raw map[string]json.RawMessage
-	if err := json.Unmarshal(data, &raw); err != nil {
-		return nil, err
-	}
+// extrasFromRaw returns the subset of raw keys not in `known`.
+func extrasFromRaw(raw map[string]json.RawMessage, known map[string]bool) map[string]json.RawMessage {
 	out := map[string]json.RawMessage{}
 	for k, v := range raw {
 		if !known[k] {
 			out[k] = v
 		}
 	}
-	return out, nil
+	return out
+}
+
+// lenientUnmarshal decodes a JSON object into dst field by field, best-effort:
+// a field whose wire value has the wrong type is skipped (it keeps its zero
+// value) instead of failing the whole decode. Only an undecodable JSON object
+// returns an error.
+//
+// dst must be a pointer to a struct; fields are matched by their `json` tag.
+// The raw key→value map is returned so callers can extract Extras from it.
+func lenientUnmarshal(data []byte, dst any) (map[string]json.RawMessage, error) {
+	var raw map[string]json.RawMessage
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return nil, err
+	}
+	v := reflect.ValueOf(dst).Elem()
+	t := v.Type()
+	for i := 0; i < t.NumField(); i++ {
+		f := t.Field(i)
+		name, _, _ := strings.Cut(f.Tag.Get("json"), ",")
+		if name == "" || name == "-" {
+			continue
+		}
+		rawVal, ok := raw[name]
+		if !ok || string(rawVal) == "null" {
+			continue
+		}
+		fv := v.Field(i)
+		if !fv.CanSet() {
+			continue
+		}
+		target := reflect.New(f.Type)
+		if err := json.Unmarshal(rawVal, target.Interface()); err != nil {
+			continue // wrong-typed field: degrade to the zero value
+		}
+		fv.Set(target.Elem())
+	}
+	return raw, nil
 }
 
 // UnmarshalJSON populates Extras + RawResponse alongside the typed fields.
+// Wrong-typed fields degrade to their zero values instead of failing the call.
 func (r *Recognition) UnmarshalJSON(data []byte) error {
-	type alias Recognition
-	if err := json.Unmarshal(data, (*alias)(r)); err != nil {
-		return err
-	}
-	extras, err := extractExtras(data, recognitionKnownKeys)
+	raw, err := lenientUnmarshal(data, r)
 	if err != nil {
 		return err
 	}
-	r.Extras = extras
+	r.Extras = extrasFromRaw(raw, recognitionKnownKeys)
 	r.RawResponse = append(r.RawResponse[:0], data...)
 	return nil
 }
@@ -198,6 +230,9 @@ func lisTnStreamingURL(songLink, provider string) string {
 func (r *Recognition) directStreamingURL(provider StreamingProvider) string {
 	switch provider {
 	case ProviderAppleMusic:
+		if r.AppleMusic != nil && r.AppleMusic.URL != "" {
+			return r.AppleMusic.URL
+		}
 		if u, ok := r.Extras["apple_music"]; ok {
 			var am struct {
 				URL string `json:"url"`
@@ -207,6 +242,11 @@ func (r *Recognition) directStreamingURL(provider StreamingProvider) string {
 			}
 		}
 	case ProviderSpotify:
+		if r.Spotify != nil {
+			if v := spotifyDirectURL(r.Spotify.Extras, r.Spotify.URI); v != "" {
+				return v
+			}
+		}
 		if u, ok := r.Extras["spotify"]; ok {
 			var sp struct {
 				ExternalURLs map[string]string `json:"external_urls"`
@@ -222,6 +262,9 @@ func (r *Recognition) directStreamingURL(provider StreamingProvider) string {
 			}
 		}
 	case ProviderDeezer:
+		if r.Deezer != nil && r.Deezer.Link != "" {
+			return r.Deezer.Link
+		}
 		if u, ok := r.Extras["deezer"]; ok {
 			var dz struct {
 				Link string `json:"link"`
@@ -231,6 +274,11 @@ func (r *Recognition) directStreamingURL(provider StreamingProvider) string {
 			}
 		}
 	case ProviderNapster:
+		if r.Napster != nil {
+			if href := stringFromRaw(r.Napster.Extras["href"]); href != "" {
+				return href
+			}
+		}
 		if u, ok := r.Extras["napster"]; ok {
 			var np struct {
 				Href string `json:"href"`
@@ -241,6 +289,31 @@ func (r *Recognition) directStreamingURL(provider StreamingProvider) string {
 		}
 	}
 	return ""
+}
+
+// spotifyDirectURL resolves a Spotify URL from the block's extras
+// (external_urls.spotify) with the typed URI as fallback.
+func spotifyDirectURL(extras map[string]json.RawMessage, uri string) string {
+	if raw, ok := extras["external_urls"]; ok {
+		var ext map[string]string
+		if json.Unmarshal(raw, &ext) == nil && ext["spotify"] != "" {
+			return ext["spotify"]
+		}
+	}
+	return uri
+}
+
+// stringFromRaw decodes a raw JSON value as a string, or "" when absent or
+// not a string.
+func stringFromRaw(raw json.RawMessage) string {
+	if raw == nil {
+		return ""
+	}
+	var s string
+	if json.Unmarshal(raw, &s) != nil {
+		return ""
+	}
+	return s
 }
 
 // StreamingURL returns a direct or redirect URL for a streaming provider.
@@ -278,14 +351,24 @@ func (r *Recognition) StreamingURLs() map[StreamingProvider]string {
 // (Apple Music, Spotify, Deezer). The SDK consumer is responsible for honoring
 // caching/attribution/redistribution constraints.
 func (r *Recognition) PreviewURL() string {
+	if r.AppleMusic != nil {
+		if u := applePreviewURL(r.AppleMusic.Extras["previews"]); u != "" {
+			return u
+		}
+	}
 	if am, ok := r.Extras["apple_music"]; ok {
 		var amp struct {
-			Previews []struct {
-				URL string `json:"url"`
-			} `json:"previews"`
+			Previews json.RawMessage `json:"previews"`
 		}
-		if json.Unmarshal(am, &amp) == nil && len(amp.Previews) > 0 && amp.Previews[0].URL != "" {
-			return amp.Previews[0].URL
+		if json.Unmarshal(am, &amp) == nil {
+			if u := applePreviewURL(amp.Previews); u != "" {
+				return u
+			}
+		}
+	}
+	if r.Spotify != nil {
+		if u := stringFromRaw(r.Spotify.Extras["preview_url"]); u != "" {
+			return u
 		}
 	}
 	if sp, ok := r.Extras["spotify"]; ok {
@@ -294,6 +377,11 @@ func (r *Recognition) PreviewURL() string {
 		}
 		if json.Unmarshal(sp, &sps) == nil && sps.PreviewURL != "" {
 			return sps.PreviewURL
+		}
+	}
+	if r.Deezer != nil {
+		if u := stringFromRaw(r.Deezer.Extras["preview"]); u != "" {
+			return u
 		}
 	}
 	if dz, ok := r.Extras["deezer"]; ok {
@@ -305,6 +393,21 @@ func (r *Recognition) PreviewURL() string {
 		}
 	}
 	return ""
+}
+
+// applePreviewURL extracts previews[0].url from a raw apple_music `previews`
+// array, or "" when absent/mistyped.
+func applePreviewURL(raw json.RawMessage) string {
+	if raw == nil {
+		return ""
+	}
+	var previews []struct {
+		URL string `json:"url"`
+	}
+	if json.Unmarshal(raw, &previews) != nil || len(previews) == 0 {
+		return ""
+	}
+	return previews[0].URL
 }
 
 // StreamingURL returns the lis.tn redirect URL for a streaming provider, or
@@ -358,17 +461,13 @@ var enterpriseMatchKnownKeys = map[string]bool{
 	"upc": true, "song_link": true, "start_offset": true, "end_offset": true,
 }
 
-// UnmarshalJSON for EnterpriseMatch.
+// UnmarshalJSON for EnterpriseMatch. Wrong-typed fields degrade to zero values.
 func (m *EnterpriseMatch) UnmarshalJSON(data []byte) error {
-	type alias EnterpriseMatch
-	if err := json.Unmarshal(data, (*alias)(m)); err != nil {
-		return err
-	}
-	extras, err := extractExtras(data, enterpriseMatchKnownKeys)
+	raw, err := lenientUnmarshal(data, m)
 	if err != nil {
 		return err
 	}
-	m.Extras = extras
+	m.Extras = extrasFromRaw(raw, enterpriseMatchKnownKeys)
 	m.RawResponse = append(m.RawResponse[:0], data...)
 	return nil
 }
@@ -415,15 +514,11 @@ var streamKnownKeys = map[string]bool{
 }
 
 func (s *Stream) UnmarshalJSON(data []byte) error {
-	type alias Stream
-	if err := json.Unmarshal(data, (*alias)(s)); err != nil {
-		return err
-	}
-	extras, err := extractExtras(data, streamKnownKeys)
+	raw, err := lenientUnmarshal(data, s)
 	if err != nil {
 		return err
 	}
-	s.Extras = extras
+	s.Extras = extrasFromRaw(raw, streamKnownKeys)
 	s.RawResponse = append(s.RawResponse[:0], data...)
 	return nil
 }
@@ -500,15 +595,11 @@ var lyricsKnownKeys = map[string]bool{
 }
 
 func (l *LyricsResult) UnmarshalJSON(data []byte) error {
-	type alias LyricsResult
-	if err := json.Unmarshal(data, (*alias)(l)); err != nil {
-		return err
-	}
-	extras, err := extractExtras(data, lyricsKnownKeys)
+	raw, err := lenientUnmarshal(data, l)
 	if err != nil {
 		return err
 	}
-	l.Extras = extras
+	l.Extras = extrasFromRaw(raw, lyricsKnownKeys)
 	l.RawResponse = append(l.RawResponse[:0], data...)
 	return nil
 }
@@ -522,15 +613,11 @@ var appleMusicKnownKeys = map[string]bool{
 }
 
 func (a *AppleMusicMetadata) UnmarshalJSON(data []byte) error {
-	type alias AppleMusicMetadata
-	if err := json.Unmarshal(data, (*alias)(a)); err != nil {
-		return err
-	}
-	extras, err := extractExtras(data, appleMusicKnownKeys)
+	raw, err := lenientUnmarshal(data, a)
 	if err != nil {
 		return err
 	}
-	a.Extras = extras
+	a.Extras = extrasFromRaw(raw, appleMusicKnownKeys)
 	a.RawResponse = append(a.RawResponse[:0], data...)
 	return nil
 }
@@ -541,15 +628,11 @@ var spotifyKnownKeys = map[string]bool{
 }
 
 func (s *SpotifyMetadata) UnmarshalJSON(data []byte) error {
-	type alias SpotifyMetadata
-	if err := json.Unmarshal(data, (*alias)(s)); err != nil {
-		return err
-	}
-	extras, err := extractExtras(data, spotifyKnownKeys)
+	raw, err := lenientUnmarshal(data, s)
 	if err != nil {
 		return err
 	}
-	s.Extras = extras
+	s.Extras = extrasFromRaw(raw, spotifyKnownKeys)
 	s.RawResponse = append(s.RawResponse[:0], data...)
 	return nil
 }
@@ -557,15 +640,11 @@ func (s *SpotifyMetadata) UnmarshalJSON(data []byte) error {
 var deezerKnownKeys = map[string]bool{"id": true, "title": true, "duration": true, "link": true}
 
 func (d *DeezerMetadata) UnmarshalJSON(data []byte) error {
-	type alias DeezerMetadata
-	if err := json.Unmarshal(data, (*alias)(d)); err != nil {
-		return err
-	}
-	extras, err := extractExtras(data, deezerKnownKeys)
+	raw, err := lenientUnmarshal(data, d)
 	if err != nil {
 		return err
 	}
-	d.Extras = extras
+	d.Extras = extrasFromRaw(raw, deezerKnownKeys)
 	d.RawResponse = append(d.RawResponse[:0], data...)
 	return nil
 }
@@ -575,15 +654,11 @@ var napsterKnownKeys = map[string]bool{
 }
 
 func (n *NapsterMetadata) UnmarshalJSON(data []byte) error {
-	type alias NapsterMetadata
-	if err := json.Unmarshal(data, (*alias)(n)); err != nil {
-		return err
-	}
-	extras, err := extractExtras(data, napsterKnownKeys)
+	raw, err := lenientUnmarshal(data, n)
 	if err != nil {
 		return err
 	}
-	n.Extras = extras
+	n.Extras = extrasFromRaw(raw, napsterKnownKeys)
 	n.RawResponse = append(n.RawResponse[:0], data...)
 	return nil
 }
@@ -591,15 +666,11 @@ func (n *NapsterMetadata) UnmarshalJSON(data []byte) error {
 var musicBrainzKnownKeys = map[string]bool{"id": true, "score": true, "title": true, "length": true}
 
 func (m *MusicBrainzEntry) UnmarshalJSON(data []byte) error {
-	type alias MusicBrainzEntry
-	if err := json.Unmarshal(data, (*alias)(m)); err != nil {
-		return err
-	}
-	extras, err := extractExtras(data, musicBrainzKnownKeys)
+	raw, err := lenientUnmarshal(data, m)
 	if err != nil {
 		return err
 	}
-	m.Extras = extras
+	m.Extras = extrasFromRaw(raw, musicBrainzKnownKeys)
 	m.RawResponse = append(m.RawResponse[:0], data...)
 	return nil
 }
@@ -613,15 +684,11 @@ var streamCallbackSongKnownKeys = map[string]bool{
 }
 
 func (s *StreamCallbackSong) UnmarshalJSON(data []byte) error {
-	type alias StreamCallbackSong
-	if err := json.Unmarshal(data, (*alias)(s)); err != nil {
-		return err
-	}
-	extras, err := extractExtras(data, streamCallbackSongKnownKeys)
+	raw, err := lenientUnmarshal(data, s)
 	if err != nil {
 		return err
 	}
-	s.Extras = extras
+	s.Extras = extrasFromRaw(raw, streamCallbackSongKnownKeys)
 	return nil
 }
 
@@ -635,15 +702,11 @@ var streamCallbackNotificationKnownKeys = map[string]bool{
 }
 
 func (n *StreamCallbackNotification) UnmarshalJSON(data []byte) error {
-	type alias StreamCallbackNotification
-	if err := json.Unmarshal(data, (*alias)(n)); err != nil {
-		return err
-	}
-	extras, err := extractExtras(data, streamCallbackNotificationKnownKeys)
+	raw, err := lenientUnmarshal(data, n)
 	if err != nil {
 		return err
 	}
-	n.Extras = extras
+	n.Extras = extrasFromRaw(raw, streamCallbackNotificationKnownKeys)
 	n.RawResponse = append(n.RawResponse[:0], data...)
 	return nil
 }
@@ -651,15 +714,11 @@ func (n *StreamCallbackNotification) UnmarshalJSON(data []byte) error {
 var enterpriseChunkResultKnownKeys = map[string]bool{"songs": true, "offset": true}
 
 func (r *EnterpriseChunkResult) UnmarshalJSON(data []byte) error {
-	type alias EnterpriseChunkResult
-	if err := json.Unmarshal(data, (*alias)(r)); err != nil {
-		return err
-	}
-	extras, err := extractExtras(data, enterpriseChunkResultKnownKeys)
+	raw, err := lenientUnmarshal(data, r)
 	if err != nil {
 		return err
 	}
-	r.Extras = extras
+	r.Extras = extrasFromRaw(raw, enterpriseChunkResultKnownKeys)
 	r.RawResponse = append(r.RawResponse[:0], data...)
 	return nil
 }

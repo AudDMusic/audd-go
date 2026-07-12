@@ -59,7 +59,9 @@ func NewLongpollConsumer(category string, opts ...LongpollConsumerOption) *Longp
 	for _, o := range opts {
 		o(c)
 	}
-	c.httpc = newHTTPClient("", defaultStandardTimeout, c.userHTTPClient)
+	// No client-level timeout: each longpoll request gets a per-request
+	// deadline sized to the poll timeout plus a margin.
+	c.httpc = newHTTPClient("", 0, c.userHTTPClient)
 	return c
 }
 
@@ -113,7 +115,11 @@ func (c *LongpollConsumer) IterateContext(ctx context.Context, opts *LongpollCon
 	go runLongpoll(pollCtx, longpollSource{
 		fetch: func(ctx context.Context, params map[string]string) (*httpResponse, error) {
 			return retryDo(ctx, policy, func() (*httpResponse, error) {
-				return c.httpc.getNoToken(ctx, longpollURL, params)
+				// Size the request deadline to the poll timeout + margin so
+				// poll timeouts above 60s aren't cut short by the transport.
+				reqCtx, cancel := context.WithTimeout(ctx, longpollRequestTimeout(timeout))
+				defer cancel()
+				return c.httpc.getNoToken(reqCtx, longpollURL, params)
 			})
 		},
 		category:  c.category,

@@ -3,8 +3,21 @@ package audd
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"strings"
+	"time"
 )
+
+// longpollTimeoutMargin is added on top of the poll timeout when sizing the
+// per-request deadline for longpoll GETs.
+const longpollTimeoutMargin = 10 * time.Second
+
+// longpollRequestTimeout sizes the HTTP deadline for one longpoll request:
+// the server-side poll timeout plus a network margin.
+func longpollRequestTimeout(pollTimeoutSeconds int) time.Duration {
+	return time.Duration(pollTimeoutSeconds)*time.Second + longpollTimeoutMargin
+}
 
 // Stream-management URL fragments.
 const (
@@ -73,7 +86,7 @@ func (s *StreamsClient) SetCallbackUrlContext(ctx context.Context, urlStr string
 		}
 	}
 	data["url"] = finalURL
-	_, err = s.post(ctx, pathSetCallbackURL, data, RetryClassMutating)
+	_, err = s.post(ctx, "setCallbackUrl", pathSetCallbackURL, data, RetryClassMutating)
 	return err
 }
 
@@ -90,11 +103,12 @@ func (s *StreamsClient) GetCallbackUrl() (string, error) {
 	return s.GetCallbackUrlContext(context.Background())
 }
 
-// GetCallbackUrlContext returns the configured callback URL, or "" if none is
-// set (server returns error #19 in that case, which we surface as
-// ErrInvalidRequest).
+// GetCallbackUrlContext returns the configured callback URL. When no callback
+// URL is set for the account, the server responds with error #19 ("Internal
+// error" — that response is the no-callback-URL signal, not a real internal
+// failure), which surfaces as an *AudDAPIError matching ErrBlocked.
 func (s *StreamsClient) GetCallbackUrlContext(ctx context.Context) (string, error) {
-	result, err := s.post(ctx, pathGetCallbackURL, map[string]string{}, RetryClassRead)
+	result, err := s.post(ctx, "getCallbackUrl", pathGetCallbackURL, map[string]string{}, RetryClassRead)
 	if err != nil {
 		return "", err
 	}
@@ -135,7 +149,7 @@ func (s *StreamsClient) AddContext(ctx context.Context, req AddStreamRequest) er
 	if req.Callbacks != "" {
 		data["callbacks"] = req.Callbacks
 	}
-	_, err := s.post(ctx, pathAddStream, data, RetryClassMutating)
+	_, err := s.post(ctx, "addStream", pathAddStream, data, RetryClassMutating)
 	return err
 }
 
@@ -147,7 +161,7 @@ func (s *StreamsClient) SetURL(radioID int, urlStr string) error {
 
 // SetURLContext changes the stream URL for an existing radio_id.
 func (s *StreamsClient) SetURLContext(ctx context.Context, radioID int, urlStr string) error {
-	_, err := s.post(ctx, pathSetStreamURL, map[string]string{
+	_, err := s.post(ctx, "setStreamUrl", pathSetStreamURL, map[string]string{
 		"radio_id": fmt.Sprint(radioID), "url": urlStr,
 	}, RetryClassMutating)
 	return err
@@ -161,7 +175,7 @@ func (s *StreamsClient) Delete(radioID int) error {
 
 // DeleteContext removes a stream subscription.
 func (s *StreamsClient) DeleteContext(ctx context.Context, radioID int) error {
-	_, err := s.post(ctx, pathDeleteStream, map[string]string{
+	_, err := s.post(ctx, "deleteStream", pathDeleteStream, map[string]string{
 		"radio_id": fmt.Sprint(radioID),
 	}, RetryClassMutating)
 	return err
@@ -175,7 +189,7 @@ func (s *StreamsClient) List() ([]Stream, error) {
 
 // ListContext returns all configured streams.
 func (s *StreamsClient) ListContext(ctx context.Context) ([]Stream, error) {
-	result, err := s.post(ctx, pathGetStreams, map[string]string{}, RetryClassRead)
+	result, err := s.post(ctx, "getStreams", pathGetStreams, map[string]string{}, RetryClassRead)
 	if err != nil {
 		return nil, err
 	}
@@ -197,7 +211,7 @@ func (s *StreamsClient) ListContext(ctx context.Context) ([]Stream, error) {
 // authenticated client's token + radio_id. No network call. Useful for
 // sharing categories with browser/widget code without leaking the api_token.
 func (s *StreamsClient) DeriveLongpollCategory(radioID int) string {
-	return DeriveLongpollCategory(s.c.apiToken, radioID)
+	return DeriveLongpollCategory(s.c.APIToken(), radioID)
 }
 
 // LongpollOptions controls the longpoll iterator. Zero values use sane defaults.
@@ -299,7 +313,12 @@ func (s *StreamsClient) LongpollContext(ctx context.Context, category string, op
 		fetch: func(ctx context.Context, params map[string]string) (*httpResponse, error) {
 			policy := s.c.retryPolicy(RetryClassRead)
 			return retryDo(ctx, policy, func() (*httpResponse, error) {
-				return s.c.standardHTTP.get(ctx, apiBase+pathLongpoll, params)
+				// Longpoll requests are sized to the poll timeout plus a
+				// margin — a poll timeout above the standard 60s HTTP
+				// timeout must not be cut short by the transport.
+				reqCtx, cancel := context.WithTimeout(ctx, longpollRequestTimeout(timeout))
+				defer cancel()
+				return s.c.longpollHTTP.get(reqCtx, apiBase+pathLongpoll, params)
 			})
 		},
 		category:  category,
@@ -416,13 +435,18 @@ func isLongpollKeepalive(body map[string]any) bool {
 
 // preflightCallbackURL surfaces a friendly error when the account hasn't set
 // a callback URL — the silent-failure mode for longpoll subscriptions.
+//
+// The no-callback-URL signal is error #19 with the "Internal error" message.
+// Code 19 also covers real conditions (maintenance, blocked requests), so the
+// rewrite only happens when the message indicates the no-callback case; any
+// other #19 passes through unchanged.
 func (s *StreamsClient) preflightCallbackURL(ctx context.Context) error {
 	_, err := s.GetCallbackUrlContext(ctx)
 	if err == nil {
 		return nil
 	}
 	var apiErr *AudDAPIError
-	if asAPIErr(err, &apiErr) && apiErr.ErrorCode == noCallbackErrorCode {
+	if errors.As(err, &apiErr) && apiErr.ErrorCode == noCallbackErrorCode && indicatesNoCallbackURL(apiErr.Message) {
 		return &AudDAPIError{
 			ErrorCode:  0,
 			Message:    preflightNoCallbackHint,
@@ -433,28 +457,31 @@ func (s *StreamsClient) preflightCallbackURL(ctx context.Context) error {
 	return err
 }
 
+// indicatesNoCallbackURL reports whether a code-19 error message from
+// getCallbackUrl is the no-callback-URL signal ("Internal error") rather than
+// a real server condition (maintenance, blocked request, abuse, ...).
+func indicatesNoCallbackURL(msg string) bool {
+	lower := strings.ToLower(msg)
+	return strings.Contains(lower, "internal") || strings.Contains(lower, "callback")
+}
+
 // post wraps the common POST + decode-success flow used by all stream methods.
 // Returns the body's `result` field (not the whole body) on success.
-func (s *StreamsClient) post(ctx context.Context, path string, data map[string]string, class RetryClass) (any, error) {
+func (s *StreamsClient) post(ctx context.Context, method, path string, data map[string]string, class RetryClass) (any, error) {
 	policy := s.c.retryPolicy(class)
+	endpoint := apiBase + path
+	obs := s.c.observeCall(method, endpoint)
 	resp, err := retryDo(ctx, policy, func() (*httpResponse, error) {
-		return s.c.standardHTTP.postForm(ctx, apiBase+path, formFields{Data: data})
+		return s.c.standardHTTP.postForm(ctx, endpoint, formFields{Data: data})
 	})
 	if err != nil {
+		obs.fail()
 		return nil, &AudDConnectionError{Cause: err}
 	}
+	obs.done(resp)
 	body, err := s.c.decodeOrRaise(resp)
 	if err != nil {
 		return nil, err
 	}
 	return body["result"], nil
-}
-
-// asAPIErr is a small wrapper to keep call-sites readable.
-func asAPIErr(err error, target **AudDAPIError) bool {
-	type asAble interface {
-		As(any) bool
-	}
-	_ = asAble(nil)
-	return errAs(err, target)
 }

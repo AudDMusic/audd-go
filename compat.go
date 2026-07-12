@@ -26,7 +26,7 @@ import (
 type Song = Recognition
 
 // Audd* type aliases — the typed error and event symbols were renamed to
-// AudD* (brand-correct PascalCase) in v1.5.7. The old names remain as
+// AudD* (brand-correct PascalCase) in v1.5.8. The old names remain as
 // aliases for code already on v1.5.6 or earlier; they will be removed in
 // v2.0.0. Update to the AudD* names at your convenience.
 //
@@ -63,21 +63,24 @@ func (c *Client) RecognizeByFile(file io.Reader, metadata string, options map[st
 	return c.RecognizeContext(context.Background(), file, opts)
 }
 
-// FindLyrics is the deprecated flat-API wrapper.
+// FindLyrics is the deprecated flat-API wrapper. Entries in the options map
+// are forwarded as extra form fields.
 //
 // Deprecated: use client.Advanced().FindLyrics(query) instead. This shim
 // will be removed in v2.0.0.
-func (c *Client) FindLyrics(query string, _ map[string]string) ([]LyricsResult, error) {
-	return c.Advanced().FindLyrics(query)
+func (c *Client) FindLyrics(query string, options map[string]string) ([]LyricsResult, error) {
+	return c.Advanced().findLyricsContext(context.Background(), query, options)
 }
 
-// AddStream is the deprecated flat-API wrapper.
+// AddStream is the deprecated flat-API wrapper. Entries in the options map
+// are forwarded as extra form fields; the typed arguments win on collision.
 //
 // Deprecated: use client.Streams().Add(AddStreamRequest{...}) instead. This
 // shim will be removed in v2.0.0.
-func (c *Client) AddStream(streamURL string, radioID int, callbacks string, _ map[string]string) error {
+func (c *Client) AddStream(streamURL string, radioID int, callbacks string, options map[string]string) error {
 	return c.Streams().Add(AddStreamRequest{
 		URL: streamURL, RadioID: radioID, Callbacks: callbacks,
+		ExtraParameters: options,
 	})
 }
 
@@ -127,12 +130,20 @@ func (c *Client) AddSongToCustomDB(audioID int, source any) error {
 
 // legacyRecognizeOpts converts the v0-API "metadata + options map" pair into a
 // new-style *RecognizeOptions. The v0 `metadata` arg already matches the
-// comma-separated form RecognizeOptions.ReturnMetadata expects, so it passes through
-// unchanged.
+// comma-separated form RecognizeOptions.ReturnMetadata expects, so it passes
+// through unchanged. "market" maps onto the typed field; every other options
+// key is forwarded via ExtraParameters (typed fields win on collision).
 func legacyRecognizeOpts(metadata string, options map[string]string) *RecognizeOptions {
 	opts := &RecognizeOptions{ReturnMetadata: metadata}
-	if v, ok := options["market"]; ok {
-		opts.Market = v
+	for k, v := range options {
+		if k == "market" {
+			opts.Market = v
+			continue
+		}
+		if opts.ExtraParameters == nil {
+			opts.ExtraParameters = map[string]string{}
+		}
+		opts.ExtraParameters[k] = v
 	}
 	return opts
 }

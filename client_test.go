@@ -21,12 +21,15 @@ func newMockClient(t *testing.T, h http.HandlerFunc) (*Client, *httptest.Server)
 	c := NewClient("test", WithHTTPClient(srv.Client()), WithMaxAttempts(1))
 	c.standardHTTP = newHTTPClient("test", 0, srv.Client())
 	c.enterpriseHTTP = newHTTPClient("test", 0, srv.Client())
+	c.longpollHTTP = newHTTPClient("test", 0, srv.Client())
 	c.standardHTTP.apiToken = "test-token"
 	c.enterpriseHTTP.apiToken = "test-token"
+	c.longpollHTTP.apiToken = "test-token"
 	// Override base URLs by intercepting via the test server URL.
 	// Strategy: rewrite via custom transport.
 	c.standardHTTP.hc = &http.Client{Transport: rewriteTransport{base: srv.URL}}
 	c.enterpriseHTTP.hc = &http.Client{Transport: rewriteTransport{base: srv.URL}}
+	c.longpollHTTP.hc = &http.Client{Transport: rewriteTransport{base: srv.URL}}
 	return c, srv
 }
 
@@ -159,7 +162,7 @@ func TestRecognize_ReturnAndMarketArePropagated(t *testing.T) {
 
 	_, err := c.RecognizeContext(context.Background(), "https://example.com/song.mp3", &RecognizeOptions{
 		ReturnMetadata: "apple_music,spotify",
-		Market: "us",
+		Market:         "us",
 	})
 	require.NoError(t, err)
 	assert.Equal(t, "apple_music,spotify", seenReturn)
@@ -257,7 +260,7 @@ func TestRecognize_ExtraParametersPropagated(t *testing.T) {
 	defer func() { _ = c.Close() }()
 
 	_, err := c.RecognizeContext(context.Background(), "https://example.com/song.mp3", &RecognizeOptions{
-		ReturnMetadata:          "apple_music",
+		ReturnMetadata:  "apple_music",
 		ExtraParameters: map[string]string{"foo": "bar", "return": "ignored"},
 	})
 	require.NoError(t, err)
