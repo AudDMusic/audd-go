@@ -147,7 +147,7 @@ fmt.Println("Spotify URI:", result.Spotify.URI)
 fmt.Println("Preview:    ", result.PreviewURL())  // first preview across requested providers, "" if none
 ```
 
-Valid `ReturnMetadata` values: `apple_music`, `spotify`, `deezer`, `napster`,
+Valid `ReturnMetadata` values: `apple_music`, `spotify`, `deezer`,
 `musicbrainz`. The metadata-block fields (`AppleMusic`, `Spotify`, `Deezer`,
 `Napster`) are pointers and may be nil; `MusicBrainz` is a slice — guard
 accordingly.
