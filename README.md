@@ -148,8 +148,8 @@ fmt.Println("Preview:    ", result.PreviewURL())  // first preview across reques
 ```
 
 Valid `ReturnMetadata` values: `apple_music`, `spotify`, `deezer`,
-`musicbrainz`. The metadata-block fields (`AppleMusic`, `Spotify`, `Deezer`,
-`Napster`) are pointers and may be nil; `MusicBrainz` is a slice — guard
+`musicbrainz`. The metadata-block fields (`AppleMusic`, `Spotify`,
+`Deezer`) are pointers and may be nil; `MusicBrainz` is a slice — guard
 accordingly.
 
 ### Reading additional metadata
