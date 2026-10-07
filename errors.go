@@ -117,7 +117,7 @@ type AudDCustomCatalogAccessError struct {
 func (e *AudDCustomCatalogAccessError) Error() string {
 	return fmt.Sprintf(`Adding songs to your custom catalog requires enterprise access that isn't enabled on your account.
 
-Note: the custom-catalog endpoint is for adding songs to your private fingerprint database, not for music recognition. If you intended to identify music, use client.Recognize(...) (or client.RecognizeEnterprise(...) for files longer than 25 seconds) instead.
+Note: the custom-catalog endpoint is for adding songs to your private fingerprint database, not for music recognition. If you intended to identify music, use client.Recognize(...) (or client.RecognizeEnterprise(...) to scan beyond the first 12 seconds of a file) instead.
 
 To request custom-catalog access, contact api@audd.io.
 

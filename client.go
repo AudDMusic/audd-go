@@ -348,7 +348,8 @@ func (c *Client) Recognize(source Source, opts *RecognizeOptions) (*Recognition,
 
 // RecognizeContext sends the source to the standard recognize endpoint and
 // returns the typed result. Returns (nil, nil) when the server returns
-// status=success with result=null (no match).
+// status=success with result=null (no match). Only the first 12 seconds of
+// the audio are analyzed; use RecognizeEnterpriseContext to scan beyond them.
 //
 // Source can be a URL string, a file path string, []byte, or io.Reader.
 // See the Source type for details.

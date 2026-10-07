@@ -1,8 +1,8 @@
 // Add a song to your private fingerprint catalog.
 //
 // **This is NOT how you submit audio for music recognition.** For
-// recognition, use client.Recognize (or client.RecognizeEnterprise for files
-// longer than 25 seconds). This example demonstrates the custom-catalog
+// recognition, use client.Recognize (or client.RecognizeEnterprise to scan
+// beyond the first 12 seconds of a file). This example demonstrates the custom-catalog
 // upload — for adding YOUR OWN tracks to YOUR private fingerprint database.
 // Requires special access; contact api@audd.io.
 //

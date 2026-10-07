@@ -11,8 +11,8 @@ const pathUpload = "/upload/"
 // CustomCatalogClient handles uploads to your private fingerprint catalog.
 //
 // **This is NOT how you submit audio for music recognition.** For
-// recognition, use Client.Recognize (or Client.RecognizeEnterprise for files
-// longer than 25 seconds). This client manipulates your **private
+// recognition, use Client.Recognize (or Client.RecognizeEnterprise to scan
+// beyond the first 12 seconds of a file). This client manipulates your **private
 // fingerprint catalog** so AudD's recognition can later identify *your own*
 // tracks for *your account only*. Requires special access — contact
 // api@audd.io if you need it enabled.

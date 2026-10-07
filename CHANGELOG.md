@@ -5,6 +5,15 @@ All notable changes to this project are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.5.20] - 2026-10-07
+
+### Fixed
+
+- Documentation and the custom-catalog access error message now state that
+  `Recognize` analyzes only the first 12 seconds of the audio, and point to
+  `RecognizeEnterprise` to scan beyond them (previously described as a
+  25-second limit).
+
 ## [1.5.19] - 2026-07-12
 
 ### Changed
