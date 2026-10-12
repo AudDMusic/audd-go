@@ -541,10 +541,13 @@ func (m *EnterpriseMatch) StreamingURLs() map[StreamingProvider]string {
 }
 
 // EnterpriseMatch is one match within a chunk of the enterprise endpoint's
-// response. Multiple matches per file are common.
+// response. Multiple matches per file are common. Public-DB matches populate
+// Artist/Title/etc.; custom-DB matches populate AudioID instead. Use
+// IsPublicMatch / IsCustomMatch to discriminate.
 type EnterpriseMatch struct {
 	Score       int    `json:"score"`
 	Timecode    string `json:"timecode"`
+	AudioID     *int   `json:"audio_id,omitempty"`
 	Artist      string `json:"artist,omitempty"`
 	Title       string `json:"title,omitempty"`
 	Album       string `json:"album,omitempty"`
@@ -568,8 +571,8 @@ type EnterpriseMatch struct {
 }
 
 var enterpriseMatchKnownKeys = map[string]bool{
-	"score": true, "timecode": true, "artist": true, "title": true,
-	"album": true, "release_date": true, "label": true, "isrc": true,
+	"score": true, "timecode": true, "audio_id": true, "artist": true,
+	"title": true, "album": true, "release_date": true, "label": true, "isrc": true,
 	"upc": true, "song_link": true, "start_offset": true, "end_offset": true,
 }
 
@@ -582,6 +585,15 @@ func (m *EnterpriseMatch) UnmarshalJSON(data []byte) error {
 	m.Extras = extrasFromRaw(raw, enterpriseMatchKnownKeys)
 	m.RawResponse = append(m.RawResponse[:0], data...)
 	return nil
+}
+
+// IsCustomMatch reports whether this is a custom-DB match (audio_id populated).
+func (m *EnterpriseMatch) IsCustomMatch() bool { return m.AudioID != nil }
+
+// IsPublicMatch reports whether this is a public-DB match (artist/title set,
+// audio_id absent).
+func (m *EnterpriseMatch) IsPublicMatch() bool {
+	return m.AudioID == nil && (m.Artist != "" || m.Title != "")
 }
 
 // ThumbnailURL returns the cover-art URL for lis.tn-hosted song_links, else "".

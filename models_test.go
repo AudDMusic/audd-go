@@ -77,6 +77,26 @@ func TestEnterpriseMatch_ParsesISRCAndUPC(t *testing.T) {
 	assert.Equal(t, "00000000", m.UPC)
 }
 
+func TestEnterpriseMatch_CustomMatchAudioID(t *testing.T) {
+	data := []byte(`{"score": 100, "timecode": "01:45", "audio_id": 146, "start_offset": 0, "end_offset": 11960}`)
+	var m EnterpriseMatch
+	require.NoError(t, json.Unmarshal(data, &m))
+	require.NotNil(t, m.AudioID)
+	assert.Equal(t, 146, *m.AudioID)
+	assert.True(t, m.IsCustomMatch())
+	assert.False(t, m.IsPublicMatch())
+	assert.NotContains(t, m.Extras, "audio_id")
+}
+
+func TestEnterpriseMatch_PublicMatchHasNoAudioID(t *testing.T) {
+	data := []byte(`{"score": 100, "timecode": "00:56", "artist": "X", "title": "Y"}`)
+	var m EnterpriseMatch
+	require.NoError(t, json.Unmarshal(data, &m))
+	assert.Nil(t, m.AudioID)
+	assert.False(t, m.IsCustomMatch())
+	assert.True(t, m.IsPublicMatch())
+}
+
 // TestEnterpriseMatch_OmittedScoreISRCUPC verifies the CEO rule: a successful
 // enterprise response whose song omits score/isrc/upc/label decodes without
 // error, leaving those fields at their zero values while the present fields

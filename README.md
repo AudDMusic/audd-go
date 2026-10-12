@@ -57,7 +57,9 @@ result, err := client.Recognize("/path/to/clip.mp3", nil)
 `client.RecognizeEnterprise(source, &audd.EnterpriseOptions{Limit: ptr(1)})`,
 which returns `[]EnterpriseMatch` across the file's chunks. Each match
 carries the same core tags plus `Score`, `StartSeconds`, `EndSeconds`,
-`StartOffset`, `EndOffset`, `ISRC`, `UPC`. Access to `ISRC`, `UPC`, and
+`StartOffset`, `EndOffset`, `ISRC`, `UPC`; matches from your custom catalog
+carry `AudioID` instead of the public tags (`IsCustomMatch()` /
+`IsPublicMatch()` tell them apart). Access to `ISRC`, `UPC`, and
 `Score` requires a Startup plan or higher — [contact us](mailto:api@audd.io)
 for enterprise features.
 

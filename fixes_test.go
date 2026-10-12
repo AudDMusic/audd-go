@@ -93,6 +93,20 @@ func TestLenient_EnterpriseMatch_StringScore(t *testing.T) {
 	assert.Equal(t, "A", matches[0].Artist)
 }
 
+func TestLenient_EnterpriseMatch_AudioID(t *testing.T) {
+	var m EnterpriseMatch
+	require.NoError(t, json.Unmarshal([]byte(`{"timecode": "01:45", "audio_id": "146"}`), &m))
+	require.NotNil(t, m.AudioID, "numeric-string audio_id parses")
+	assert.Equal(t, 146, *m.AudioID)
+	assert.True(t, m.IsCustomMatch())
+
+	var g EnterpriseMatch
+	require.NoError(t, json.Unmarshal([]byte(`{"timecode": "01:45", "audio_id": "abc", "artist": "A"}`), &g))
+	assert.Nil(t, g.AudioID, "non-numeric string does not coerce to int")
+	assert.False(t, g.IsCustomMatch())
+	assert.Equal(t, "A", g.Artist)
+}
+
 func TestLenient_ScalarCoercionMatrix(t *testing.T) {
 	cases := []struct {
 		name string

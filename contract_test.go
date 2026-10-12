@@ -93,6 +93,37 @@ func TestContract_EnterpriseWithIsrcUpc(t *testing.T) {
 	assert.Equal(t, "00602547037169", m.UPC)
 }
 
+func TestContract_EnterpriseCustomMatch(t *testing.T) {
+	body := loadFixture(t, "enterprise_custom_match.json")
+	var top map[string]json.RawMessage
+	require.NoError(t, json.Unmarshal(body, &top))
+	var chunks []EnterpriseChunkResult
+	require.NoError(t, json.Unmarshal(top["result"], &chunks))
+	require.Len(t, chunks, 1)
+	require.Len(t, chunks[0].Songs, 1)
+	m := chunks[0].Songs[0]
+	require.NotNil(t, m.AudioID)
+	assert.Equal(t, 146, *m.AudioID)
+	assert.Equal(t, "01:45", m.Timecode)
+	assert.True(t, m.IsCustomMatch())
+	assert.False(t, m.IsPublicMatch())
+	assert.NotContains(t, m.Extras, "audio_id")
+}
+
+func TestContract_EnterprisePublicMatchHasNoAudioID(t *testing.T) {
+	body := loadFixture(t, "enterprise_with_isrc_upc.json")
+	var top map[string]json.RawMessage
+	require.NoError(t, json.Unmarshal(body, &top))
+	var chunks []EnterpriseChunkResult
+	require.NoError(t, json.Unmarshal(top["result"], &chunks))
+	require.NotEmpty(t, chunks)
+	require.NotEmpty(t, chunks[0].Songs)
+	m := chunks[0].Songs[0]
+	assert.Nil(t, m.AudioID)
+	assert.False(t, m.IsCustomMatch())
+	assert.True(t, m.IsPublicMatch())
+}
+
 // errFromFixtureMatchesSentinel re-runs the fixture body through
 // raiseFromErrorResponse to verify code → sentinel mapping.
 func errFromFixture(t *testing.T, name string) error {
