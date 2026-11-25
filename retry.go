@@ -19,9 +19,9 @@ import (
 //	RetryClassMutating    — Streams.Add, Streams.Delete, etc.:
 //	                        retry only on pre-upload connection failures.
 //	                        DO NOT retry 5xx (the side effect may have happened).
-//	                        NOTE: CustomCatalog.Add does NOT use this class —
-//	                        upload is metered, so it pins to 1 attempt to
-//	                        avoid double-charging on transient failures.
+//	                        NOTE: CustomCatalog.Add pins this class to a
+//	                        single attempt: an upload is never retried
+//	                        automatically.
 type RetryClass int
 
 const (

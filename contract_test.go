@@ -34,6 +34,17 @@ func loadFixture(t *testing.T, name string) []byte {
 	return data
 }
 
+// loadNewFixture is loadFixture for a fixture that may not be published in
+// audd-openapi yet: the test skips until the file exists there.
+func loadNewFixture(t *testing.T, name string) []byte {
+	t.Helper()
+	path := filepath.Join(fixturesDir(t), name)
+	if _, err := os.Stat(path); errors.Is(err, os.ErrNotExist) {
+		t.Skipf("fixture %s is not in this audd-openapi checkout yet", name)
+	}
+	return loadFixture(t, name)
+}
+
 // loadResultRecognition pulls body.result and unmarshals into a Recognition.
 func loadResultRecognition(t *testing.T, name string) *Recognition {
 	t.Helper()
@@ -198,6 +209,38 @@ func TestContract_LongpollNoEvents(t *testing.T) {
 	var raw map[string]any
 	require.NoError(t, json.Unmarshal(body, &raw))
 	assert.Equal(t, "no events before timeout", raw["timeout"])
+
+	page := parseLongpollResponse(&httpResponse{HTTPStatus: 200, RawBody: body})
+	assert.NoError(t, page.err)
+	assert.Empty(t, page.events)
+	assert.True(t, page.hasSince, "the timeout response carries the next since_time")
+}
+
+func TestContract_LongpollEvents(t *testing.T) {
+	body := loadNewFixture(t, "longpoll_events.json")
+	page := parseLongpollResponse(&httpResponse{HTTPStatus: 200, RawBody: body})
+	require.NoError(t, page.err)
+	require.Len(t, page.events, 2)
+	for _, ev := range page.events {
+		require.NotNil(t, ev.match)
+		assert.NotZero(t, ev.match.RadioID)
+		assert.NotEmpty(t, ev.match.Song.Artist)
+		assert.NotEmpty(t, ev.match.Song.Title)
+	}
+	require.True(t, page.hasSince)
+	assert.Positive(t, page.since)
+}
+
+func TestContract_LongpollError(t *testing.T) {
+	body := loadNewFixture(t, "longpoll_error.json")
+	var raw map[string]any
+	require.NoError(t, json.Unmarshal(body, &raw))
+	page := parseLongpollResponse(&httpResponse{HTTPStatus: 200, RawBody: body, JSONBody: raw})
+	require.Error(t, page.err)
+	assert.ErrorIs(t, page.err, ErrInvalidRequest)
+	var apiErr *AudDAPIError
+	require.True(t, errors.As(page.err, &apiErr))
+	assert.NotEmpty(t, apiErr.Message)
 }
 
 func TestContract_GetStreamsEmpty(t *testing.T) {

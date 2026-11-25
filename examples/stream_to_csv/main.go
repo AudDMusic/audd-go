@@ -88,28 +88,25 @@ func main() {
 	defer func() { _ = poll.Close() }()
 	log.Printf("longpolling category=%s — Ctrl-C to stop", category)
 
-	// 6. Demux events. Matches go to CSV, notifications to stderr, errors are terminal.
+	// 6. Demux events. Matches go to CSV, notifications to stderr, errors are
+	//    terminal. Errors closes when the poll ends (after sending the reason,
+	//    if there is one), so it is the loop's exit.
 loop:
 	for {
 		select {
 		case m, ok := <-poll.Matches:
-			if !ok {
-				break loop
+			if ok {
+				writeMatch(csvWriter, &m)
 			}
-			writeMatch(csvWriter, &m)
 		case n, ok := <-poll.Notifications:
-			if !ok {
-				break loop
+			if ok {
+				log.Printf("notification radio_id=%d code=%d %q",
+					n.RadioID, n.NotificationCode, n.NotificationMessage)
 			}
-			log.Printf("notification radio_id=%d code=%d %q",
-				n.RadioID, n.NotificationCode, n.NotificationMessage)
 		case err, ok := <-poll.Errors:
-			if !ok {
-				break loop
+			if ok {
+				log.Printf("longpoll error: %v", err)
 			}
-			log.Printf("longpoll error: %v", err)
-			break loop
-		case <-ctx.Done():
 			break loop
 		}
 	}

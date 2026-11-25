@@ -5,6 +5,63 @@ All notable changes to this project are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.5.22] - 2026-11-25
+
+### Fixed
+
+- Longpoll reads the server's event responses,
+  `{"events":[{"timestamp":…,"category":"…","data":…}]}`. Each event's
+  `data` (an object or a JSON string) is parsed like a callback body and
+  delivered on `Matches` / `Notifications` in order, and the next request
+  sends the newest event `timestamp` as `since_time`. An event that doesn't
+  parse, or a recognition with an empty `results` list, is skipped and the
+  poll carries on. Previously the first event ended the poll with "callback
+  body has neither result nor notification". Bodies with `result` or
+  `notification` at the top level are still delivered as before.
+- A longpoll error body such as `{"error":"Invalid timeout arg.  Must be
+  1-120."}` (sent with HTTP 200) ends the poll after that one request with an
+  `*AudDAPIError` that matches `ErrInvalidRequest` and carries the server's
+  text. An AudD error block (`{"status":"error","error":{…}}`) maps by its
+  code like any API error.
+- A longpoll response with nothing new in it (neither an event nor a new
+  timestamp: an unknown shape, an empty body, non-JSON, an empty `events`
+  list) is followed by a pause that doubles from 1 second to 30 seconds
+  before the next request. Previously an empty or non-JSON body ended the
+  poll with an `*AudDSerializationError`.
+- `LongpollPoll.Notifications` holds up to 16 unread notifications and drops
+  the oldest when full, so a loop that reads only `Matches` no longer stalls
+  the poll on the first notification.
+- Closing a poll or cancelling its context closes the channels without
+  sending a "context canceled" error on `Errors`.
+- `since_time` is carried as a 64-bit value, so millisecond timestamps no
+  longer overflow on 32-bit platforms.
+- `WithStandardTimeout` and `WithEnterpriseTimeout` apply when the client is
+  built `WithHTTPClient`: each request carries its own deadline.
+- Wrong-shaped response containers degrade instead of failing the call:
+  `Recognize` with a non-object `result` returns no match;
+  `RecognizeEnterprise` and `Streams().List` with a non-list `result` return
+  an empty slice; and a list element that doesn't decode (an enterprise chunk
+  or song, a stream, a MusicBrainz entry, a callback song) is skipped while
+  the rest are kept.
+
+### Security
+
+- `Streams().Longpoll`, `LongpollContext`, `LongpollByRadioID` and
+  `LongpollByRadioIDContext` no longer send `api_token` in the longpoll
+  query string; the category alone authorizes the request.
+- Transport errors quote the request URL without its query string, so a
+  connection error never prints query parameters.
+- `HandleCallback` reads at most 1 MiB of the request body.
+
+### Changed
+
+- Documentation: the README longpoll loop treats `Errors` closing as the
+  end of the poll, the README enterprise snippet compiles, `EnterpriseOptions`
+  documents `Skip`, `Every`, `Limit`, `SkipFirstSeconds` and `UseTimecode`,
+  `LongpollOptions` documents `SinceTime` as milliseconds and `Timeout` as 1
+  to 120 seconds, and `CustomCatalog().Add` is documented as never retried
+  automatically.
+
 ## [1.5.21] - 2026-10-12
 
 ### Added

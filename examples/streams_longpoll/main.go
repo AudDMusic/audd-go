@@ -27,25 +27,23 @@ func main() {
 	poll := consumer.IterateContext(ctx, nil)
 	defer func() { _ = poll.Close() }()
 
+	// Errors closes when the poll ends, after sending the reason if there is
+	// one, so it is the loop's exit.
 	for {
 		select {
 		case m, ok := <-poll.Matches:
-			if !ok {
-				return
+			if ok {
+				fmt.Printf("recognized: %s — %s (radio %d, score %d)\n",
+					m.Song.Artist, m.Song.Title, m.RadioID, m.Song.Score)
 			}
-			fmt.Printf("recognized: %s — %s (radio %d, score %d)\n",
-				m.Song.Artist, m.Song.Title, m.RadioID, m.Song.Score)
 		case n, ok := <-poll.Notifications:
-			if !ok {
-				return
+			if ok {
+				fmt.Printf("notification %d: %s\n", n.NotificationCode, n.NotificationMessage)
 			}
-			fmt.Printf("notification %d: %s\n", n.NotificationCode, n.NotificationMessage)
-		case err := <-poll.Errors:
-			if err != nil {
+		case err, ok := <-poll.Errors:
+			if ok {
 				log.Fatal(err)
 			}
-			return
-		case <-ctx.Done():
 			return
 		}
 	}

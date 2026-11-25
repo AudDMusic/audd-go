@@ -49,13 +49,18 @@ type formFields struct {
 	File *fileField
 }
 
-// httpClient performs the multipart form POST + GET dance against AudD's
-// HTTP API. The api_token is always injected on every request.
+// httpClient performs the multipart form POSTs and the longpoll GETs against
+// AudD's HTTP API. POSTs carry the api_token as a form field; GETs never
+// carry it.
 type httpClient struct {
 	tokenMu  sync.RWMutex
 	apiToken string
 	hc       *http.Client
 	owned    bool // true when we created hc ourselves and should Close it
+	// timeout bounds each request: through hc.Timeout on an owned client,
+	// and through a per-request context deadline on an injected one. 0 means
+	// no SDK-side bound.
+	timeout time.Duration
 }
 
 // setAPIToken atomically swaps the api_token used for subsequent requests.
@@ -76,13 +81,23 @@ func (h *httpClient) currentAPIToken() string {
 // newHTTPClient builds a transport with the given timeout. Callers may pass
 // their own *http.Client (corporate proxy, mTLS, observability sidecar,
 // etc.) and we honor it; otherwise we build a fresh one with sensible
-// defaults.
+// defaults. Either way, each request is bounded by timeout (when > 0).
 func newHTTPClient(apiToken string, timeout time.Duration, hc *http.Client) *httpClient {
 	if hc == nil {
 		hc = &http.Client{Timeout: timeout}
-		return &httpClient{apiToken: apiToken, hc: hc, owned: true}
+		return &httpClient{apiToken: apiToken, hc: hc, owned: true, timeout: timeout}
 	}
-	return &httpClient{apiToken: apiToken, hc: hc, owned: false}
+	return &httpClient{apiToken: apiToken, hc: hc, owned: false, timeout: timeout}
+}
+
+// requestContext applies the per-request deadline for an injected client
+// (an owned client already carries it as hc.Timeout). The returned cancel
+// func must always be called.
+func (h *httpClient) requestContext(ctx context.Context) (context.Context, context.CancelFunc) {
+	if !h.owned && h.timeout > 0 {
+		return context.WithTimeout(ctx, h.timeout)
+	}
+	return ctx, func() {}
 }
 
 // postForm POSTs `fields` as multipart/form-data with `api_token` always added.
@@ -122,6 +137,8 @@ func (h *httpClient) postForm(ctx context.Context, target string, fields formFie
 		return nil, err
 	}
 
+	ctx, cancel := h.requestContext(ctx)
+	defer cancel()
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, target, &buf)
 	if err != nil {
 		return nil, err
@@ -131,31 +148,8 @@ func (h *httpClient) postForm(ctx context.Context, target string, fields formFie
 	return h.do(req)
 }
 
-// get sends a GET with query params and the api_token (added if not present).
-func (h *httpClient) get(ctx context.Context, target string, params map[string]string) (*httpResponse, error) {
-	u, err := url.Parse(target)
-	if err != nil {
-		return nil, err
-	}
-	q := u.Query()
-	if tok := h.currentAPIToken(); tok != "" {
-		q.Set("api_token", tok)
-	}
-	for k, v := range params {
-		q.Set(k, v)
-	}
-	u.RawQuery = q.Encode()
-
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u.String(), nil)
-	if err != nil {
-		return nil, err
-	}
-	req.Header.Set("User-Agent", userAgent())
-	return h.do(req)
-}
-
-// getNoToken sends a GET without injecting the api_token. Used by the
-// tokenless LongpollConsumer.
+// getNoToken sends a GET with query params and without the api_token. The
+// longpoll endpoint (the only GET) is authorized by its category alone.
 func (h *httpClient) getNoToken(ctx context.Context, target string, params map[string]string) (*httpResponse, error) {
 	u, err := url.Parse(target)
 	if err != nil {
@@ -167,6 +161,8 @@ func (h *httpClient) getNoToken(ctx context.Context, target string, params map[s
 	}
 	u.RawQuery = q.Encode()
 
+	ctx, cancel := h.requestContext(ctx)
+	defer cancel()
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u.String(), nil)
 	if err != nil {
 		return nil, err
@@ -178,7 +174,7 @@ func (h *httpClient) getNoToken(ctx context.Context, target string, params map[s
 func (h *httpClient) do(req *http.Request) (*httpResponse, error) {
 	res, err := h.hc.Do(req)
 	if err != nil {
-		return nil, err
+		return nil, redactURLError(err)
 	}
 	defer func() { _ = res.Body.Close() }()
 	body, err := io.ReadAll(res.Body)
@@ -197,6 +193,28 @@ func (h *httpClient) do(req *http.Request) (*httpResponse, error) {
 		}
 	}
 	return out, nil
+}
+
+// redactURLError drops the query string from the URL that net/http puts in
+// its transport errors, so an error message or log line never shows query
+// parameters. The *url.Error type and its cause are kept, so errors.As and
+// errors.Is keep working.
+func redactURLError(err error) error {
+	ue, ok := err.(*url.Error)
+	if !ok {
+		return err
+	}
+	u, perr := url.Parse(ue.URL)
+	if perr != nil {
+		return &url.Error{Op: ue.Op, URL: "", Err: ue.Err}
+	}
+	if u.RawQuery == "" && u.User == nil {
+		return err
+	}
+	u.RawQuery = ""
+	u.ForceQuery = false
+	u.User = nil
+	return &url.Error{Op: ue.Op, URL: u.String(), Err: ue.Err}
 }
 
 // requestIDFromHeaders is case-insensitive (Go's http.Header is canonicalized,

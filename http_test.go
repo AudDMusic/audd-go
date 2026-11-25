@@ -2,9 +2,11 @@ package audd
 
 import (
 	"context"
+	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"strings"
 	"testing"
 	"time"
@@ -54,21 +56,42 @@ func TestPostForm_FileFieldUploads(t *testing.T) {
 	assert.Equal(t, []byte("hello"), seenFileBytes)
 }
 
-func TestGet_AddsAPITokenAndParams(t *testing.T) {
-	var seenURL string
+func TestTransportError_URLCarriesNoQuery(t *testing.T) {
+	// A refused connection: the transport error names the URL, which must
+	// not carry the query string.
+	h := newHTTPClient("tok", 2*time.Second, nil)
+	_, err := h.getNoToken(context.Background(), "http://127.0.0.1:1/longpoll/?api_token=SECRET-XYZ",
+		map[string]string{"category": "cat", "timeout": "5"})
+	require.Error(t, err)
+	assert.NotContains(t, err.Error(), "SECRET-XYZ")
+	assert.NotContains(t, err.Error(), "api_token")
+	assert.NotContains(t, err.Error(), "category=")
+	assert.Contains(t, err.Error(), "http://127.0.0.1:1/longpoll/")
+
+	var urlErr *url.Error
+	require.True(t, errors.As(err, &urlErr), "the *url.Error type is kept")
+	assert.True(t, isPreUploadConnectionError(err), "the cause is kept for retry classification")
+
+	wrapped := &AudDConnectionError{Cause: err}
+	assert.NotContains(t, wrapped.Error(), "SECRET-XYZ")
+}
+
+func TestPostForm_InjectedClientStillBoundedByTimeout(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		seenURL = r.URL.String()
-		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write([]byte(`{"status":"success"}`))
+		select {
+		case <-r.Context().Done():
+		case <-time.After(2 * time.Second):
+		}
 	}))
 	defer srv.Close()
 
-	h := newHTTPClient("tok", 5*time.Second, nil)
-	_, err := h.get(context.Background(), srv.URL, map[string]string{"category": "cat", "timeout": "5"})
-	require.NoError(t, err)
-	assert.Contains(t, seenURL, "api_token=tok")
-	assert.Contains(t, seenURL, "category=cat")
-	assert.Contains(t, seenURL, "timeout=5")
+	// An injected client with no Timeout of its own: the SDK's per-request
+	// timeout still bounds the call.
+	h := newHTTPClient("tok", 100*time.Millisecond, &http.Client{})
+	start := time.Now()
+	_, err := h.postForm(context.Background(), srv.URL, formFields{Data: map[string]string{"a": "b"}})
+	require.Error(t, err)
+	assert.Less(t, time.Since(start), time.Second)
 }
 
 func TestGetNoToken_OmitsAPIToken(t *testing.T) {

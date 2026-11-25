@@ -38,6 +38,10 @@ func (cc *CustomCatalogClient) Add(audioID int, source Source) error {
 // There is no public list/delete endpoint; track audio_id ↔ song mappings on
 // your side.
 //
+// The upload is sent once and never retried automatically: check the error
+// before sending it again (an upload to an audio_id that already holds a
+// song replaces it).
+//
 // **Reminder: this is NOT for music recognition.** For recognition, use
 // Client.Recognize / Client.RecognizeEnterprise.
 func (cc *CustomCatalogClient) AddContext(ctx context.Context, audioID int, source Source) error {
@@ -45,12 +49,9 @@ func (cc *CustomCatalogClient) AddContext(ctx context.Context, audioID int, sour
 	if err != nil {
 		return err
 	}
-	// Custom-catalog upload is metered: every successful call fingerprints
-	// audio and is billed. A transport hiccup mid-upload can leave the server
-	// having done (and charged for) the work. Retrying could double-charge
-	// for the same audio. Pin this endpoint to a single attempt regardless of
-	// the client's MaxAttempts override; transient failures surface to the
-	// caller as a clean error.
+	// A custom-catalog upload is sent once and never retried automatically,
+	// whatever the client's MaxAttempts: a failure surfaces to the caller as
+	// an error, and the caller decides whether to send it again.
 	policy := RetryPolicy{Class: RetryClassMutating, MaxAttempts: 1, BackoffFactor: time.Millisecond}
 	endpoint := apiBase + pathUpload
 	obs := cc.c.observeCall("upload", endpoint)

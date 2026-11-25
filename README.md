@@ -53,10 +53,15 @@ result, err := client.Recognize("/path/to/clip.mp3", nil)
 ```
 
 `Recognize` accepts a URL string, a file-path string, `[]byte`, or any
-`io.Reader`. For longer audio files, use
-`client.RecognizeEnterprise(source, &audd.EnterpriseOptions{Limit: ptr(1)})`,
-which returns `[]EnterpriseMatch` across the file's chunks. Each match
-carries the same core tags plus `Score`, `StartSeconds`, `EndSeconds`,
+`io.Reader`. For longer audio files, use `RecognizeEnterprise`, which
+returns `[]EnterpriseMatch` across the file's 12-second chunks:
+
+```go
+limit := 1 // recognize at most one chunk while you try it out
+matches, err := client.RecognizeEnterprise("/path/to/long-recording.mp3", &audd.EnterpriseOptions{Limit: &limit})
+```
+
+Each match carries the same core tags plus `Score`, `StartSeconds`, `EndSeconds`,
 `StartOffset`, `EndOffset`, `ISRC`, `UPC`; matches from your custom catalog
 carry `AudioID` instead of the public tags (`IsCustomMatch()` /
 `IsPublicMatch()` tell them apart). Access to `ISRC`, `UPC`, and
@@ -247,6 +252,12 @@ client := audd.NewClient("your-api-token",
 )
 ```
 
+An injected `http.Client` carries every request, enterprise uploads and
+longpoll waits included. Leave its `Timeout` at 0: the SDK bounds each
+request itself (the standard and enterprise timeouts above, and the poll
+timeout plus 10 seconds for longpoll), and a non-zero `Timeout` caps them
+all.
+
 Retries are cost-aware:
 
 - Read endpoints retry on 408/429/5xx and any net error.
@@ -254,6 +265,9 @@ Retries are cost-aware:
   (DNS, TCP dial). Post-upload errors are not retried — the server may have
   already done the metered work.
 - Mutating endpoints retry only on pre-upload connection failures.
+- `CustomCatalog().Add` is sent once and never retried automatically: check
+  the error before sending it again (an upload to an `audio_id` that already
+  holds a song replaces it).
 
 ## Observability
 
@@ -323,7 +337,8 @@ and [`examples/streams_setup`](./examples/streams_setup) for runnable code.
 
 If hosting a callback receiver isn't an option, longpoll for events from the
 client side. Three typed channels — Matches, Notifications, Errors — drive a
-`select` loop:
+`select` loop. Errors closes when the poll ends, after sending the reason if
+there is one:
 
 ```go
 ctx, cancel := context.WithCancel(context.Background())
@@ -336,17 +351,29 @@ defer poll.Close()
 
 for {
     select {
-    case m := <-poll.Matches:
-        fmt.Println("matched:", m.Song.Artist, "—", m.Song.Title)
-    case n := <-poll.Notifications:
-        fmt.Println("notification:", n.NotificationMessage)
-    case err := <-poll.Errors:
-        log.Fatal(err)
-    case <-ctx.Done():
-        return
+    case m, ok := <-poll.Matches:
+        if ok {
+            fmt.Println("matched:", m.Song.Artist, "—", m.Song.Title)
+        }
+    case n, ok := <-poll.Notifications:
+        if ok {
+            fmt.Println("notification:", n.NotificationMessage)
+        }
+    case err, ok := <-poll.Errors:
+        if ok {
+            log.Fatal(err) // the poll has stopped
+        }
+        return // ctx was cancelled or the poll was closed
     }
 }
 ```
+
+Events arrive in order, and each request asks only for events newer than
+the last one. Network failures and 5xx responses are retried with backoff
+(`WithMaxAttempts` sets the budget); the poll stops with an error once the
+budget is spent, or straight away if the server rejects the request itself,
+such as a `Timeout` outside 1–120 seconds (`audd.ErrInvalidRequest`).
+Longpoll requests carry only the category, never your API token.
 
 For browser widgets, embedded UIs, or anywhere you need to consume a category
 without leaking the API token, use the tokenless variant — same channels,

@@ -2,7 +2,6 @@ package audd
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
@@ -193,18 +192,9 @@ func (s *StreamsClient) ListContext(ctx context.Context) ([]Stream, error) {
 	if err != nil {
 		return nil, err
 	}
-	if result == nil {
-		return []Stream{}, nil
-	}
-	raw, mErr := json.Marshal(result)
-	if mErr != nil {
-		return nil, &AudDSerializationError{Message: mErr.Error()}
-	}
-	var out []Stream
-	if uErr := json.Unmarshal(raw, &out); uErr != nil {
-		return nil, &AudDSerializationError{Message: uErr.Error(), RawText: string(raw)}
-	}
-	return out, nil
+	// A result that isn't a list means no streams; an entry that doesn't
+	// decode is skipped.
+	return decodeLenientList[Stream](result), nil
 }
 
 // DeriveLongpollCategory computes the 9-char longpoll category locally for the
@@ -216,9 +206,12 @@ func (s *StreamsClient) DeriveLongpollCategory(radioID int) string {
 
 // LongpollOptions controls the longpoll iterator. Zero values use sane defaults.
 type LongpollOptions struct {
-	// SinceTime is the unix timestamp to resume from. 0 means "start from now".
+	// SinceTime is a server timestamp in milliseconds since the Unix epoch,
+	// as carried by an earlier longpoll response: only events newer than it
+	// are delivered. 0 means "start from now".
 	SinceTime int
-	// Timeout is the longpoll timeout in seconds (server-side default: 50).
+	// Timeout is how long, in seconds, the server holds each longpoll request
+	// open while waiting for events: 1 to 120. 0 means 50.
 	Timeout int
 	// SkipCallbackCheck disables the preflight that detects the "no callback URL"
 	// misconfiguration. Default false (preflight is on).
@@ -226,19 +219,41 @@ type LongpollOptions struct {
 }
 
 // LongpollPoll is an active long-poll subscription. Three typed channels
-// surface its output; consume them with `select`. Errors is single-shot and
-// closing — when an error fires, the consumer is terminal.
+// surface its output; consume them with `select`. Errors closes when the poll
+// ends, after sending the terminal error if there is one, so it is the
+// natural exit for the loop.
 //
-// Closing the parent context (or calling Close) tears down the background
-// poller and closes all channels.
+// Each longpoll response that carries events delivers them in order, and the
+// next request asks only for events newer than the newest one. A response
+// with nothing new in it (neither an event nor a new server timestamp) is
+// followed by a pause that grows from 1 second to 30 seconds, so a
+// misbehaving response never turns into a busy loop.
+//
+// The poll ends when its context is cancelled, Close is called, or a
+// terminal error is sent on Errors. Cancelling or closing aborts a request
+// that is waiting and closes all three channels without sending an error.
 type LongpollPoll struct {
 	// Matches yields one StreamCallbackMatch per recognition. Closed when
-	// the poll terminates.
+	// the poll ends.
 	Matches <-chan StreamCallbackMatch
-	// Notifications yields stream-lifecycle events.
+	// Notifications yields stream-lifecycle events. It holds up to 16 unread
+	// notifications; when it is full, the oldest unread one is dropped, so a
+	// loop that reads only Matches never stalls the poll. Closed when the
+	// poll ends.
 	Notifications <-chan StreamCallbackNotification
-	// Errors yields a single terminal error and then closes. After an
-	// error fires, Matches and Notifications close too.
+	// Errors yields at most one terminal error and then closes; Matches and
+	// Notifications close with it. The terminal errors are:
+	//
+	//   - *AudDAPIError matching ErrInvalidRequest: the server rejected the
+	//     request itself (for example a Timeout outside 1-120); Message
+	//     carries the server's text. Sending the same request again would
+	//     get the same answer, so the poll stops. An AudD error block
+	//     ({"status":"error","error":{...}}) maps by its code instead, like
+	//     any API error.
+	//   - *AudDAPIError matching ErrServer: an HTTP error status (408, 429
+	//     and 5xx are retried first, within the retry budget).
+	//   - *AudDConnectionError: a network failure that persisted through the
+	//     retries.
 	Errors <-chan error
 
 	cancel context.CancelFunc
@@ -287,7 +302,10 @@ func (s *StreamsClient) LongpollByRadioIDContext(ctx context.Context, radioID in
 // whose Matches / Notifications / Errors channels are filled by a background
 // goroutine. The goroutine exits when ctx is cancelled, the poll's Close()
 // is called, or a terminal error fires (which is sent on Errors then closes
-// all three channels).
+// all three channels). See LongpollPoll for how responses are handled.
+//
+// The longpoll requests carry only the category, never the api_token: the
+// category alone authorizes them.
 //
 // On entry, runs a preflight GetCallbackUrlContext() unless
 // SkipCallbackCheck is set — catches the common silent-failure mode where
@@ -303,13 +321,9 @@ func (s *StreamsClient) LongpollContext(ctx context.Context, category string, op
 	}
 	timeout := opts.Timeout
 	if timeout <= 0 {
-		timeout = 50
+		timeout = defaultLongpollTimeout
 	}
-	pollCtx, cancel := context.WithCancel(ctx)
-	matches := make(chan StreamCallbackMatch)
-	notifs := make(chan StreamCallbackNotification)
-	errs := make(chan error, 1)
-	go runLongpoll(pollCtx, longpollSource{
+	return startLongpoll(ctx, longpollSource{
 		fetch: func(ctx context.Context, params map[string]string) (*httpResponse, error) {
 			policy := s.c.retryPolicy(RetryClassRead)
 			return retryDo(ctx, policy, func() (*httpResponse, error) {
@@ -318,119 +332,13 @@ func (s *StreamsClient) LongpollContext(ctx context.Context, category string, op
 				// timeout must not be cut short by the transport.
 				reqCtx, cancel := context.WithTimeout(ctx, longpollRequestTimeout(timeout))
 				defer cancel()
-				return s.c.longpollHTTP.get(reqCtx, apiBase+pathLongpoll, params)
+				return s.c.longpollHTTP.getNoToken(reqCtx, apiBase+pathLongpoll, params)
 			})
 		},
 		category:  category,
-		sinceTime: opts.SinceTime,
+		sinceTime: int64(opts.SinceTime),
 		timeout:   timeout,
-	}, matches, notifs, errs)
-	return &LongpollPoll{
-		Matches:       matches,
-		Notifications: notifs,
-		Errors:        errs,
-		cancel:        cancel,
-	}, nil
-}
-
-// longpollSource abstracts the HTTP fetch so authenticated and tokenless
-// consumers share the same dispatch loop.
-type longpollSource struct {
-	fetch     func(ctx context.Context, params map[string]string) (*httpResponse, error)
-	category  string
-	sinceTime int
-	timeout   int
-}
-
-// runLongpoll drives a single subscription. Reads HTTP responses, parses
-// each into a Match or Notification, and dispatches onto the typed channels.
-// Closes all three channels on exit.
-func runLongpoll(ctx context.Context, src longpollSource, matches chan<- StreamCallbackMatch, notifs chan<- StreamCallbackNotification, errs chan<- error) {
-	defer close(matches)
-	defer close(notifs)
-	defer close(errs)
-	curSince := src.sinceTime
-	for {
-		params := map[string]string{"category": src.category, "timeout": fmt.Sprint(src.timeout)}
-		if curSince > 0 {
-			params["since_time"] = fmt.Sprint(curSince)
-		}
-		resp, err := src.fetch(ctx, params)
-		if err != nil {
-			sendErr(ctx, errs, &AudDConnectionError{Cause: err})
-			return
-		}
-		if resp.HTTPStatus >= httpClientErrorFloor {
-			sendErr(ctx, errs, &AudDAPIError{
-				ErrorCode:   0,
-				Message:     fmt.Sprintf("Longpoll endpoint returned HTTP %d", resp.HTTPStatus),
-				HTTPStatus:  resp.HTTPStatus,
-				RequestID:   resp.RequestID,
-				RawResponse: stringOrJSON(resp),
-			})
-			return
-		}
-		if resp.RawBody == nil {
-			sendErr(ctx, errs, &AudDSerializationError{Message: "Longpoll response was empty"})
-			return
-		}
-		// Benign no-events tick: server returns {"timeout":"..."} when nothing
-		// happened during the longpoll window. Advance since_time, keep polling.
-		if isLongpollKeepalive(resp.JSONBody) {
-			if ts, ok := resp.JSONBody["timestamp"].(float64); ok {
-				curSince = int(ts)
-			}
-			continue
-		}
-		match, notif, parseErr := ParseCallback(resp.RawBody)
-		if parseErr != nil {
-			sendErr(ctx, errs, parseErr)
-			return
-		}
-		switch {
-		case match != nil:
-			select {
-			case matches <- *match:
-			case <-ctx.Done():
-				return
-			}
-		case notif != nil:
-			select {
-			case notifs <- *notif:
-			case <-ctx.Done():
-				return
-			}
-		}
-		if resp.JSONBody != nil {
-			if ts, ok := resp.JSONBody["timestamp"].(float64); ok {
-				curSince = int(ts)
-			}
-		}
-	}
-}
-
-func sendErr(ctx context.Context, errs chan<- error, err error) {
-	select {
-	case errs <- err:
-	case <-ctx.Done():
-	}
-}
-
-// isLongpollKeepalive reports whether body is a `{"timeout":"..."}` no-events
-// tick: the server sends one of these every <timeout> seconds when no
-// recognition or notification is queued. Consumers shouldn't see these.
-func isLongpollKeepalive(body map[string]any) bool {
-	if body == nil {
-		return false
-	}
-	if _, hasResult := body["result"]; hasResult {
-		return false
-	}
-	if _, hasNotification := body["notification"]; hasNotification {
-		return false
-	}
-	_, hasTimeout := body["timeout"]
-	return hasTimeout
+	}), nil
 }
 
 // preflightCallbackURL surfaces a friendly error when the account hasn't set

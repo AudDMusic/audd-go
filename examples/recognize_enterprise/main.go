@@ -19,7 +19,7 @@ func main() {
 	client := audd.NewClient("test")
 	defer func() { _ = client.Close() }()
 
-	limit := 1 // hard rule: examples pass limit=1 during dev
+	limit := 1 // recognize at most one chunk while you try it out
 	matches, err := client.RecognizeEnterprise(os.Args[1], &audd.EnterpriseOptions{
 		Limit: &limit,
 	})

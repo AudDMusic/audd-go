@@ -52,8 +52,12 @@ type OnEventHook func(AudDEvent)
 type Option func(*Client)
 
 // WithHTTPClient injects a caller-managed *http.Client. Useful for corporate
-// proxies, mTLS, observability. The same client is used for both the
-// standard and enterprise transports.
+// proxies, mTLS, observability. The same client is used for the standard,
+// enterprise and longpoll transports. The SDK still bounds each request with
+// its own deadlines (WithStandardTimeout, WithEnterpriseTimeout, and the
+// longpoll timeout plus a margin), so leave the injected client's Timeout at
+// 0: a non-zero http.Client.Timeout caps every request, including enterprise
+// uploads and longpoll waits.
 func WithHTTPClient(hc *http.Client) Option {
 	return func(c *Client) { c.userHTTPClient = hc }
 }
@@ -68,12 +72,14 @@ func WithBackoffFactor(d time.Duration) Option {
 	return func(c *Client) { c.backoffFactor = d }
 }
 
-// WithStandardTimeout overrides the per-request timeout for non-enterprise endpoints.
+// WithStandardTimeout overrides the per-request timeout for non-enterprise
+// endpoints (default 60s). It applies with an injected client as well.
 func WithStandardTimeout(d time.Duration) Option {
 	return func(c *Client) { c.standardTimeout = d }
 }
 
-// WithEnterpriseTimeout overrides the per-request timeout for enterprise endpoints.
+// WithEnterpriseTimeout overrides the per-request timeout for enterprise
+// endpoints (default 1 hour). It applies with an injected client as well.
 func WithEnterpriseTimeout(d time.Duration) Option {
 	return func(c *Client) { c.enterpriseTimeout = d }
 }
@@ -317,12 +323,21 @@ type EnterpriseOptions struct {
 	// ReturnMetadata is the comma-separated list of metadata sources to include
 	// (e.g. "apple_music,spotify"). Valid values: "apple_music", "spotify",
 	// "deezer", "napster", "musicbrainz".
-	ReturnMetadata   string
-	Skip             *int
-	Every            *int
-	Limit            *int
+	ReturnMetadata string
+	// Skip is the number of 12-second chunks to skip after each run of
+	// scanned chunks.
+	Skip *int
+	// Every is the number of 12-second chunks scanned in a row. Skip 4 with
+	// Every 1 scans the first 12 seconds of every minute.
+	Every *int
+	// Limit is the upper bound on the number of chunks the server recognizes.
+	Limit *int
+	// SkipFirstSeconds is how many seconds at the start of the file to skip
+	// before the first chunk. Don't combine it with UseTimecode.
 	SkipFirstSeconds *int
-	UseTimecode      *bool
+	// UseTimecode, when true, uses the source URL's time parameter (`t`,
+	// `time_continue` or `start`) as SkipFirstSeconds.
+	UseTimecode *bool
 	// AccurateOffsets requests precise within-fragment offsets. It is on by
 	// default: leave it nil and the request sends accurate_offsets=true. Set
 	// it to a non-nil false to opt out.
@@ -384,8 +399,9 @@ func (c *Client) RecognizeContext(ctx context.Context, source Source, opts *Reco
 	if err != nil {
 		return nil, err
 	}
-	resultRaw, ok := body["result"]
-	if !ok || resultRaw == nil {
+	// Anything other than a JSON object (null, [], a string) is "no match".
+	resultRaw, ok := body["result"].(map[string]any)
+	if !ok {
 		return nil, nil
 	}
 	resultBytes, mErr := json.Marshal(resultRaw)
@@ -462,18 +478,9 @@ func (c *Client) RecognizeEnterpriseContext(ctx context.Context, source Source, 
 	if err != nil {
 		return nil, err
 	}
-	chunksRaw, ok := body["result"]
-	if !ok || chunksRaw == nil {
-		return []EnterpriseMatch{}, nil
-	}
-	chunksBytes, mErr := json.Marshal(chunksRaw)
-	if mErr != nil {
-		return nil, &AudDSerializationError{Message: "marshal enterprise result: " + mErr.Error()}
-	}
-	var chunks []EnterpriseChunkResult
-	if uErr := json.Unmarshal(chunksBytes, &chunks); uErr != nil {
-		return nil, &AudDSerializationError{Message: "decode enterprise result: " + uErr.Error()}
-	}
+	// A result that isn't a list means no matches; a chunk that doesn't
+	// decode is skipped.
+	chunks := decodeLenientList[EnterpriseChunkResult](body["result"])
 	out := []EnterpriseMatch{}
 	for _, ch := range chunks {
 		base, ok := parseOffsetToSeconds(ch.Offset)

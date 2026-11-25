@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -119,18 +120,51 @@ func TestLongpollConsumer_HTTP401_StopsWithError(t *testing.T) {
 	assert.ErrorIs(t, out.err, ErrServer)
 }
 
-func TestLongpollConsumer_BadJSON_StopsWithSerializationError(t *testing.T) {
-	c, _ := newConsumer(t, func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(200)
-		_, _ = w.Write([]byte("not json"))
-	})
-	defer func() { _ = c.Close() }()
+func TestLongpollConsumer_JunkBodies_BackOffWithoutEnding(t *testing.T) {
+	for name, body := range map[string]string{
+		"non-JSON":      "not json",
+		"empty":         "",
+		"unknown shape": `{"hello":"world"}`,
+		"empty events":  `{"events":[]}`,
+		"JSON array":    `[1,2,3]`,
+	} {
+		t.Run(name, func(t *testing.T) {
+			var calls int32
+			c, _ := newConsumer(t, func(w http.ResponseWriter, r *http.Request) {
+				atomic.AddInt32(&calls, 1)
+				_, _ = w.Write([]byte(body))
+			})
+			defer func() { _ = c.Close() }()
 
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
-	defer cancel()
-	out := awaitOutcome(t, c.IterateContext(ctx, nil), 2*time.Second)
-	require.Error(t, out.err)
-	assert.ErrorIs(t, out.err, ErrSerialization)
+			ctx, cancel := context.WithTimeout(context.Background(), 1500*time.Millisecond)
+			defer cancel()
+			p := c.IterateContext(ctx, nil)
+			defer func() { _ = p.Close() }()
+
+			select {
+			case m := <-p.Matches:
+				t.Fatalf("junk body must not produce a match: %+v", m)
+			case n := <-p.Notifications:
+				t.Fatalf("junk body must not produce a notification: %+v", n)
+			case err := <-p.Errors:
+				t.Fatalf("junk body must not end the poll: %v", err)
+			case <-ctx.Done():
+			}
+			// The pause after a response with nothing new starts at 1s and
+			// doubles, so 1.5s allows two requests.
+			n := atomic.LoadInt32(&calls)
+			assert.GreaterOrEqual(t, n, int32(1))
+			assert.LessOrEqual(t, n, int32(3), "a response with nothing new must not be re-requested in a tight loop")
+		})
+	}
+}
+
+func TestLongpollIdleDelay_DoublesUpToCap(t *testing.T) {
+	assert.Equal(t, time.Second, longpollIdleDelay(0))
+	assert.Equal(t, 2*time.Second, longpollIdleDelay(1))
+	assert.Equal(t, 16*time.Second, longpollIdleDelay(4))
+	assert.Equal(t, 30*time.Second, longpollIdleDelay(5))
+	assert.Equal(t, 30*time.Second, longpollIdleDelay(1000))
 }
 
 func TestLongpollConsumer_MatchYieldsTypedSong(t *testing.T) {

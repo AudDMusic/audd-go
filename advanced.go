@@ -2,7 +2,6 @@ package audd
 
 import (
 	"context"
-	"encoding/json"
 	"strconv"
 )
 
@@ -47,19 +46,9 @@ func (a *AdvancedClient) findLyricsContext(ctx context.Context, query string, ex
 	if err != nil {
 		return nil, err
 	}
-	resultRaw, ok := body["result"]
-	if !ok || resultRaw == nil {
-		return []LyricsResult{}, nil
-	}
-	raw, mErr := json.Marshal(resultRaw)
-	if mErr != nil {
-		return nil, &AudDSerializationError{Message: mErr.Error()}
-	}
-	var out []LyricsResult
-	if uErr := json.Unmarshal(raw, &out); uErr != nil {
-		return nil, &AudDSerializationError{Message: uErr.Error(), RawText: string(raw)}
-	}
-	return out, nil
+	// A result that isn't a list means no match; an entry that doesn't
+	// decode is skipped.
+	return decodeLenientList[LyricsResult](body["result"]), nil
 }
 
 // RawRequest is the no-context convenience wrapper around RawRequestContext.

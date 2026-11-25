@@ -24,10 +24,11 @@ How it works:
 - Computes the longpoll category locally via `DeriveLongpollCategory(radioID)`
   and opens the iterator with `Streams().LongpollContext(ctx, category, nil)`.
   Longpoll uses the context form because we need cancellation: when SIGINT or
-  SIGTERM fires, the context closes the channel.
-- Each event is `json.Marshal`-ed back to bytes and run through
-  `audd.ParseCallback`. Result envelopes write CSV rows; notification
-  envelopes (stream stopped, can't connect, etc.) go to stderr.
+  SIGTERM fires, the context ends the poll and its channels close.
+- Each typed match from `poll.Matches` becomes CSV rows (one per candidate
+  song); notifications from `poll.Notifications` (stream stopped, can't
+  connect, etc.) go to stderr. The loop exits when `poll.Errors` closes,
+  logging the error first if the poll stopped on one.
 - The CSV writer flushes after every row, so a `kill -9` still leaves a
   valid file.
 - On exit: `Streams().Delete(radioID)`. If we set the placeholder callback

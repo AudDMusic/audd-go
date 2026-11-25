@@ -77,8 +77,8 @@ func TestCustomCatalog_Add_ReaderSource(t *testing.T) {
 
 // newCustomCatalogClientWithBigRetry builds a client whose user-configured
 // MaxAttempts is 5 — enough to prove that CustomCatalog.Add overrides the
-// global setting and pins to a single attempt. Upload is metered, so retry
-// could double-charge.
+// global setting and pins to a single attempt: an upload is never retried
+// automatically.
 func newCustomCatalogClientWithBigRetry(t *testing.T, h http.HandlerFunc) *Client {
 	t.Helper()
 	srv := httptest.NewServer(h)
@@ -104,7 +104,7 @@ func TestCustomCatalog_Add_DoesNotRetryOn5xx(t *testing.T) {
 
 	err := c.CustomCatalog().Add(1, []byte("audio"))
 	require.Error(t, err, "5xx must surface as an error")
-	assert.Equal(t, int32(1), atomic.LoadInt32(&calls), "metered upload must not be retried on 5xx (could double-charge)")
+	assert.Equal(t, int32(1), atomic.LoadInt32(&calls), "upload must not be retried automatically on 5xx")
 }
 
 func TestCustomCatalog_AddContext_DoesNotRetryOn5xx(t *testing.T) {
@@ -118,14 +118,14 @@ func TestCustomCatalog_AddContext_DoesNotRetryOn5xx(t *testing.T) {
 
 	err := c.CustomCatalog().AddContext(context.Background(), 1, []byte("audio"))
 	require.Error(t, err)
-	assert.Equal(t, int32(1), atomic.LoadInt32(&calls), "metered upload must not be retried on 5xx (could double-charge)")
+	assert.Equal(t, int32(1), atomic.LoadInt32(&calls), "upload must not be retried automatically on 5xx")
 }
 
 // dialErrorTransport returns a pre-upload connect error on every RoundTrip,
 // without ever sending bytes. Pre-upload connect errors are the one class
-// that mutating endpoints normally retry — but custom-catalog upload must
-// NOT retry, since the server may have already done (and charged for) the
-// fingerprinting work on a previous attempt that hung mid-response.
+// that mutating endpoints normally retry — but a custom-catalog upload is
+// never retried automatically: the caller checks the error before sending
+// it again.
 type dialErrorTransport struct {
 	calls *int32
 }
@@ -145,7 +145,7 @@ func TestCustomCatalog_Add_DoesNotRetryOnPreUploadConnectError(t *testing.T) {
 	require.Error(t, err)
 	var connErr *AudDConnectionError
 	require.True(t, errors.As(err, &connErr), "transport failure must be wrapped as AudDConnectionError")
-	assert.Equal(t, int32(1), atomic.LoadInt32(&calls), "metered upload must not be retried on transport failure (could double-charge)")
+	assert.Equal(t, int32(1), atomic.LoadInt32(&calls), "upload must not be retried automatically on transport failure")
 }
 
 func TestCustomCatalog_AddContext_DoesNotRetryOnPreUploadConnectError(t *testing.T) {
@@ -156,5 +156,5 @@ func TestCustomCatalog_AddContext_DoesNotRetryOnPreUploadConnectError(t *testing
 
 	err := c.CustomCatalog().AddContext(context.Background(), 1, []byte("audio"))
 	require.Error(t, err)
-	assert.Equal(t, int32(1), atomic.LoadInt32(&calls), "metered upload must not be retried on transport failure (could double-charge)")
+	assert.Equal(t, int32(1), atomic.LoadInt32(&calls), "upload must not be retried automatically on transport failure")
 }

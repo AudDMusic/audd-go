@@ -30,18 +30,25 @@ func DeriveLongpollCategory(apiToken string, radioID int) string {
 	return full[:9]
 }
 
+// maxCallbackBodyBytes caps the callback body HandleCallback reads.
+const maxCallbackBodyBytes = 1 << 20
+
 // HandleCallback reads and parses a callback POST body from an *http.Request.
 // Closes the request body. Exactly one of (match, notification) is non-nil
-// on success; both are nil on error.
+// on success; both are nil on error. It reads at most 1 MiB: a larger body
+// returns an *AudDSerializationError without being read further.
 //
 // Use in your HTTP handler that receives AudD callbacks:
 //
 //	match, notification, err := audd.HandleCallback(r)
 func HandleCallback(r *http.Request) (*StreamCallbackMatch, *StreamCallbackNotification, error) {
 	defer func() { _ = r.Body.Close() }()
-	body, err := io.ReadAll(r.Body)
+	body, err := io.ReadAll(io.LimitReader(r.Body, maxCallbackBodyBytes+1))
 	if err != nil {
 		return nil, nil, &AudDConnectionError{Cause: err}
+	}
+	if len(body) > maxCallbackBodyBytes {
+		return nil, nil, &AudDSerializationError{Message: "callback body is larger than 1 MiB"}
 	}
 	return ParseCallback(body)
 }
@@ -55,15 +62,22 @@ func HandleCallback(r *http.Request) (*StreamCallbackMatch, *StreamCallbackNotif
 // for unusual transports (queue consumers, replay tools, raw bytes from a
 // webhook framework).
 func ParseCallback(body []byte) (*StreamCallbackMatch, *StreamCallbackNotification, error) {
+	match, notif, _, err := parseCallback(body)
+	return match, notif, err
+}
+
+// parseCallback is ParseCallback plus the number of songs in a recognition
+// callback's `results` list (0 for a notification).
+func parseCallback(body []byte) (*StreamCallbackMatch, *StreamCallbackNotification, int, error) {
 	var raw map[string]json.RawMessage
 	if err := json.Unmarshal(body, &raw); err != nil {
-		return nil, nil, &AudDSerializationError{Message: "callback body is not valid JSON: " + err.Error(), RawText: string(body)}
+		return nil, nil, 0, &AudDSerializationError{Message: "callback body is not valid JSON: " + err.Error(), RawText: string(body)}
 	}
 
 	if notifRaw, ok := raw["notification"]; ok {
 		var notif StreamCallbackNotification
 		if err := json.Unmarshal(notifRaw, &notif); err != nil {
-			return nil, nil, &AudDSerializationError{Message: "callback notification: " + err.Error(), RawText: string(body)}
+			return nil, nil, 0, &AudDSerializationError{Message: "callback notification: " + err.Error(), RawText: string(body)}
 		}
 		notif.RawResponse = append([]byte{}, body...)
 		if t, ok := raw["time"]; ok {
@@ -71,24 +85,25 @@ func ParseCallback(body []byte) (*StreamCallbackMatch, *StreamCallbackNotificati
 			_ = json.Unmarshal(t, &ts)
 			notif.Time = ts
 		}
-		return nil, &notif, nil
+		return nil, &notif, 0, nil
 	}
 
 	if resultRaw, ok := raw["result"]; ok {
-		match, err := parseMatch(resultRaw, body)
+		match, songs, err := parseMatch(resultRaw, body)
 		if err != nil {
-			return nil, nil, err
+			return nil, nil, 0, err
 		}
-		return match, nil, nil
+		return match, nil, songs, nil
 	}
 
-	return nil, nil, &AudDSerializationError{Message: "callback body has neither result nor notification", RawText: string(body)}
+	return nil, nil, 0, &AudDSerializationError{Message: "callback body has neither result nor notification", RawText: string(body)}
 }
 
 // parseMatch decodes a `result` block into StreamCallbackMatch. The block's
 // `results` array becomes Song (first entry) + Alternatives (remaining).
 // Wrong-typed fields degrade to zero values instead of failing the callback.
-func parseMatch(resultRaw json.RawMessage, fullBody []byte) (*StreamCallbackMatch, error) {
+// It also returns how many songs the `results` list held.
+func parseMatch(resultRaw json.RawMessage, fullBody []byte) (*StreamCallbackMatch, int, error) {
 	type rawMatch struct {
 		RadioID    int64                `json:"radio_id"`
 		Timestamp  string               `json:"timestamp,omitempty"`
@@ -98,7 +113,7 @@ func parseMatch(resultRaw json.RawMessage, fullBody []byte) (*StreamCallbackMatc
 	var rm rawMatch
 	raw, err := lenientUnmarshal(resultRaw, &rm)
 	if err != nil {
-		return nil, &AudDSerializationError{Message: "callback result: " + err.Error(), RawText: string(fullBody)}
+		return nil, 0, &AudDSerializationError{Message: "callback result: " + err.Error(), RawText: string(fullBody)}
 	}
 	extras := extrasFromRaw(raw, streamCallbackMatchKnownKeys)
 	// A successful callback never fails to parse just because `results` is
@@ -117,7 +132,7 @@ func parseMatch(resultRaw json.RawMessage, fullBody []byte) (*StreamCallbackMatc
 		Alternatives: alternatives,
 		Extras:       extras,
 		RawResponse:  append([]byte{}, fullBody...),
-	}, nil
+	}, len(rm.Results), nil
 }
 
 // JoinProviders joins provider names into the comma-separated string

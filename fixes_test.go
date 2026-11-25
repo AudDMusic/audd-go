@@ -211,6 +211,102 @@ func TestLenient_LyricsResult_WrongTypedSongID(t *testing.T) {
 	assert.Equal(t, "A", l.Artist)
 }
 
+// --- Lenient parsing: wrong-shaped containers degrade instead of failing ---
+
+func TestLenient_Recognize_NonObjectResultIsNoMatch(t *testing.T) {
+	for _, result := range []string{`[]`, `"x"`, `5`, `[{"artist":"A"}]`} {
+		c, _ := newMockClient(t, func(w http.ResponseWriter, r *http.Request) {
+			_, _ = w.Write([]byte(`{"status":"success","result":` + result + `}`))
+		})
+		res, err := c.Recognize("https://example.com/song.mp3", nil)
+		require.NoError(t, err, "result %s", result)
+		assert.Nil(t, res, "result %s", result)
+		_ = c.Close()
+	}
+}
+
+func TestLenient_Enterprise_NonListResultIsNoMatches(t *testing.T) {
+	c, _ := newMockClient(t, func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(`{"status":"success","result":{}}`))
+	})
+	defer func() { _ = c.Close() }()
+	matches, err := c.RecognizeEnterprise("https://example.com/big.mp3", nil)
+	require.NoError(t, err)
+	assert.Empty(t, matches)
+}
+
+func TestLenient_Enterprise_BadListElementsAreSkipped(t *testing.T) {
+	c, _ := newMockClient(t, func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(`{"status":"success","result":[
+			"bad chunk",
+			{"offset":"00:00","songs":["bad song", {"artist":"Good","title":"Song","start_offset":1000,"end_offset":2000}, 7]},
+			null
+		]}`))
+	})
+	defer func() { _ = c.Close() }()
+	matches, err := c.RecognizeEnterprise("https://example.com/big.mp3", nil)
+	require.NoError(t, err)
+	require.Len(t, matches, 1)
+	assert.Equal(t, "Good", matches[0].Artist)
+	require.NotNil(t, matches[0].StartSeconds)
+	assert.Equal(t, 1.0, *matches[0].StartSeconds)
+}
+
+func TestLenient_StreamsList_BadElementsAreSkipped(t *testing.T) {
+	c, _ := newMockClient(t, func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(`{"status":"success","result":[1, {"radio_id":2,"url":"twitch:b","stream_running":true}, "x", null]}`))
+	})
+	defer func() { _ = c.Close() }()
+	streams, err := c.Streams().List()
+	require.NoError(t, err)
+	require.Len(t, streams, 1)
+	assert.Equal(t, 2, streams[0].RadioID)
+
+	c2, _ := newMockClient(t, func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(`{"status":"success","result":{}}`))
+	})
+	defer func() { _ = c2.Close() }()
+	streams, err = c2.Streams().List()
+	require.NoError(t, err)
+	assert.Empty(t, streams)
+}
+
+func TestLenient_FindLyrics_BadElementsAreSkipped(t *testing.T) {
+	c, _ := newMockClient(t, func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(`{"status":"success","result":["x", {"artist":"A","title":"T","song_id":3}]}`))
+	})
+	defer func() { _ = c.Close() }()
+	out, err := c.Advanced().FindLyrics("q")
+	require.NoError(t, err)
+	require.Len(t, out, 1)
+	assert.Equal(t, 3, out[0].SongID)
+}
+
+func TestLenient_NestedListKeepsGoodElements(t *testing.T) {
+	var r Recognition
+	require.NoError(t, json.Unmarshal([]byte(`{"artist":"A","musicbrainz":["bad", {"id":"mb-1"}, null]}`), &r))
+	require.Len(t, r.MusicBrainz, 1)
+	assert.Equal(t, "mb-1", r.MusicBrainz[0].ID)
+
+	match, _, err := ParseCallback([]byte(`{"status":"success","result":{"radio_id":1,"results":["bad", {"artist":"Good","title":"T"}]}}`))
+	require.NoError(t, err)
+	assert.Equal(t, "Good", match.Song.Artist)
+	assert.Empty(t, match.Alternatives)
+}
+
+func TestHandleCallback_RejectsOversizedBody(t *testing.T) {
+	big := `{"status":"success","result":{"radio_id":1,"results":[{"artist":"` + strings.Repeat("a", 2<<20) + `"}]}}`
+	req := httptest.NewRequest(http.MethodPost, "/cb", strings.NewReader(big))
+	_, _, err := HandleCallback(req)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, ErrSerialization)
+
+	small := httptest.NewRequest(http.MethodPost, "/cb", strings.NewReader(`{"status":"success","result":{"radio_id":1,"results":[{"artist":"A"}]}}`))
+	match, _, err := HandleCallback(small)
+	require.NoError(t, err)
+	assert.Equal(t, "A", match.Song.Artist)
+}
+
 // URL helpers must resolve from the typed metadata blocks a real payload
 // decodes into (metadata keys are known keys and never land in Extras).
 func TestStreamingURL_ResolvesFromDecodedMetadataBlocks(t *testing.T) {

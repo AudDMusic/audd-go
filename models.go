@@ -159,6 +159,11 @@ func lenientUnmarshal(data []byte, dst any) (map[string]json.RawMessage, error) 
 		}
 		target := reflect.New(f.Type)
 		if err := json.Unmarshal(rawVal, target.Interface()); err != nil {
+			// A list with some bad elements keeps the good ones.
+			if f.Type.Kind() == reflect.Slice && f.Type.Elem().Kind() != reflect.Uint8 {
+				lenientSliceInto(rawVal, fv)
+				continue
+			}
 			// Wrong-typed field: coerce when convertible, otherwise degrade
 			// to the zero value.
 			coerceScalar(rawVal, fv)
@@ -167,6 +172,52 @@ func lenientUnmarshal(data []byte, dst any) (map[string]json.RawMessage, error) 
 		fv.Set(target.Elem())
 	}
 	return raw, nil
+}
+
+// lenientSliceInto decodes a JSON array into the slice fv element by element,
+// skipping elements that don't decode. A value that isn't an array leaves fv
+// at its zero value.
+func lenientSliceInto(data json.RawMessage, fv reflect.Value) {
+	var items []json.RawMessage
+	if err := json.Unmarshal(data, &items); err != nil {
+		return
+	}
+	out := reflect.MakeSlice(fv.Type(), 0, len(items))
+	for _, item := range items {
+		if string(item) == "null" {
+			continue
+		}
+		elem := reflect.New(fv.Type().Elem())
+		if err := json.Unmarshal(item, elem.Interface()); err != nil {
+			continue
+		}
+		out = reflect.Append(out, elem.Elem())
+	}
+	fv.Set(out)
+}
+
+// decodeLenientList decodes an already-parsed JSON value (as found in a
+// response's map[string]any) into a []T, element by element. Elements that
+// don't decode (and null elements) are skipped; a value that isn't a list
+// yields an empty slice.
+func decodeLenientList[T any](v any) []T {
+	items, _ := v.([]any)
+	out := make([]T, 0, len(items))
+	for _, item := range items {
+		if item == nil {
+			continue
+		}
+		b, err := json.Marshal(item)
+		if err != nil {
+			continue
+		}
+		var elem T
+		if err := json.Unmarshal(b, &elem); err != nil {
+			continue
+		}
+		out = append(out, elem)
+	}
+	return out
 }
 
 // coerceScalar converts a mismatched scalar wire value into the field's type

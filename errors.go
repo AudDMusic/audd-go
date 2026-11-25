@@ -40,8 +40,10 @@ var (
 //	    fmt.Println(apiErr.ErrorCode, apiErr.Message)
 //	}
 type AudDAPIError struct {
-	// ErrorCode is AudD's numeric code (e.g. 900, 904). 0 indicates an HTTP-level
-	// failure with no JSON body.
+	// ErrorCode is AudD's numeric code (e.g. 900, 904). 0 means the response
+	// carried no AudD error code: an HTTP-level failure with no JSON body, or
+	// a longpoll error body such as {"error":"Invalid timeout arg..."} (which
+	// matches ErrInvalidRequest).
 	ErrorCode int
 	// Message is the server's human-readable message.
 	Message string
@@ -59,6 +61,10 @@ type AudDAPIError struct {
 	BrandedMessage string
 	// RawResponse is the unparsed response body (string or map[string]any).
 	RawResponse any
+
+	// sentinel, when set, is the sentinel this error matches in place of the
+	// one derived from ErrorCode.
+	sentinel error
 }
 
 func (e *AudDAPIError) Error() string {
@@ -73,6 +79,9 @@ func (e *AudDAPIError) Error() string {
 func (e *AudDAPIError) Is(target error) bool {
 	if e == nil {
 		return false
+	}
+	if e.sentinel != nil {
+		return target == e.sentinel
 	}
 	return target == sentinelForCode(e.ErrorCode)
 }
